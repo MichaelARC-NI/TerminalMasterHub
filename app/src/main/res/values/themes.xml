@@ -3,18 +3,13 @@
     <!-- Base theme: Dark terminal-style -->
     <style name="Theme.TerminalMasterHub" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/terminal_green</item>
-        <item name="colorPrimaryVariant">@color/terminal_green_dark</item>
         <item name="colorOnPrimary">@color/black</item>
         <item name="colorSecondary">@color/terminal_amber</item>
-        <item name="colorSecondaryVariant">@color/terminal_amber_dark</item>
         <item name="colorOnSecondary">@color/black</item>
         <item name="colorSurface">@color/terminal_bg</item>
         <item name="colorOnSurface">@color/terminal_text</item>
-        <item name="colorBackground">@color/terminal_bg_dark</item>
-        <item name="colorOnBackground">@color/terminal_text</item>
         <item name="android:statusBarColor">@color/terminal_bg_dark</item>
         <item name="android:navigationBarColor">@color/terminal_bg_dark</item>
-        <item name="bottomNavigationStyle">@style/Widget.Material3.BottomNavigation.Colored</item>
     </style>
 
     <!-- Dialog theme for Python graph rendering -->
