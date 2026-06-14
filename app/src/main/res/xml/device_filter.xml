@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    USB Device Filter para ADB/Fastboot Universal
+    Detecta dispositivos en modo Fastboot y ADB
+    VID 0x18D1 (Google/Android) - Fastboot & ADB
+    VID 0x2717 (Xiaomi)
+    VID 0x22D9 (Oppo/OnePlus)
+    VID 0x12D1 (Huawei)
+    VID 0x04E8 (Samsung - Modo Fastboot)
+    VID 0x0E8D (MediaTek)
+    VID 0x2B4C (Qualcomm)
+    VID 0x05C6 (Qualcomm)
+-->
+<resources>
+    <!-- Google / Android (ADB, Fastboot) -->
+    <usb-device vendor-id="6343" />
+    <!-- Xiaomi / POCO -->
+    <usb-device vendor-id="10007" />
+    <!-- Samsung (Fastboot mode) -->
+    <usb-device vendor-id="1256" />
+    <!-- OnePlus / Oppo -->
+    <usb-device vendor-id="8921" />
+    <!-- Huawei -->
+    <usb-device vendor-id="4817" />
+    <!-- MediaTek -->
+    <usb-device vendor-id="3725" />
+    <!-- Qualcomm -->
+    <usb-device vendor-id="1478" />
+    <usb-device vendor-id="7110" />
+    <!-- Motorola -->
+    <usb-device vendor-id="7070" />
+    <!-- LG -->
+    <usb-device vendor-id="1004" />
+    <!-- Sony -->
+    <usb-device vendor-id="1355" />
+    <!-- ASUS -->
+    <usb-device vendor-id="1514" />
+    <!-- HTC -->
+    <usb-device vendor-id="1199" />
+    <!-- Lenovo -->
+    <usb-device vendor-id="1204" />
+    <!-- ZTE -->
+    <usb-device vendor-id="9115" />
+</resources>

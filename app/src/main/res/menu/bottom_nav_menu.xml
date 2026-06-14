@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/nav_terminal"
+        android:icon="@drawable/ic_terminal"
+        android:title="@string/nav_terminal" />
+
+    <item
+        android:id="@+id/nav_fastboot"
+        android:icon="@drawable/ic_usb"
+        android:title="@string/nav_fastboot" />
+
+    <item
+        android:id="@+id/nav_samsung"
+        android:icon="@drawable/ic_samsung"
+        android:title="@string/nav_samsung" />
+
+    <item
+        android:id="@+id/nav_xiaomi"
+        android:icon="@drawable/ic_xiaomi"
+        android:title="@string/nav_xiaomi" />
+
+</menu>

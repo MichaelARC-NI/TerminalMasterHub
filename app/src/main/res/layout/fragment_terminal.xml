@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/terminal_bg_dark">
+
+    <!-- Toolbar -->
+    <LinearLayout
+        android:id="@+id/terminalToolbar"
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:background="@color/terminal_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Terminal &amp; Python"
+            android:textColor="@color/terminal_green"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/btnClearTerminal"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_terminal"
+            android:contentDescription="Limpiar" />
+
+        <ImageButton
+            android:id="@+id/btnFileManager"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_storage"
+            android:contentDescription="Archivos" />
+
+        <ImageButton
+            android:id="@+id/btnRunPython"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_graph"
+            android:contentDescription="Ejecutar Python" />
+    </LinearLayout>
+
+    <!-- Terminal Output (ScrollView + TextView instead of Termux TerminalView) -->
+    <ScrollView
+        android:id="@+id/terminalLogScroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@color/terminal_bg_dark"
+        android:padding="8dp"
+        android:fillViewport="true"
+        app:layout_constraintTop_toBottomOf="@id/terminalToolbar"
+        app:layout_constraintBottom_toTopOf="@id/terminalInputBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/terminalView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:lineSpacingExtra="2dp"
+            android:textColor="@color/terminal_text"
+            android:textSize="12sp" />
+    </ScrollView>
+
+    <!-- Input Bar -->
+    <LinearLayout
+        android:id="@+id/terminalInputBar"
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:background="@color/terminal_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="$ "
+            android:textColor="@color/terminal_green"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+
+        <EditText
+            android:id="@+id/terminalInput"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@null"
+            android:hint="@string/terminal_hint"
+            android:textColor="@color/terminal_text"
+            android:textColorHint="@color/divider"
+            android:textSize="14sp"
+            android:singleLine="true"
+            android:fontFamily="monospace" />
+
+        <ImageButton
+            android:id="@+id/btnSendCommand"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_terminal"
+            android:contentDescription="Enviar"
+            android:tint="@color/terminal_green" />
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

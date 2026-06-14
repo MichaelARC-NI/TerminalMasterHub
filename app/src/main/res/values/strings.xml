@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Terminal Master Hub</string>
+
+    <!-- Bottom Navigation -->
+    <string name="nav_terminal">Terminal</string>
+    <string name="nav_fastboot">ADB/Fastboot</string>
+    <string name="nav_samsung">Samsung Odin</string>
+    <string name="nav_xiaomi">Xiaomi MiTool</string>
+
+    <!-- Terminal -->
+    <string name="terminal_hint">Escribe un comando…</string>
+    <string name="terminal_clear">Limpiar</string>
+    <string name="terminal_run_py">Ejecutar Python</string>
+
+    <!-- Fastboot -->
+    <string name="fastboot_no_device">Ningún dispositivo conectado</string>
+    <string name="fastboot_connected">Dispositivo conectado</string>
+    <string name="fastboot_send_command">Enviar comando</string>
+    <string name="fastboot_flash">Flashear imagen</string>
+
+    <!-- Samsung -->
+    <string name="samsung_no_device">Conecta un Samsung en Download Mode</string>
+    <string name="samsung_select_tar">Seleccionar archivo .tar / .tar.md5</string>
+    <string name="samsung_flash">Iniciar Flasheo</string>
+    <string name="samsung_reboot">Reiniciar a Sistema</string>
+
+    <!-- Xiaomi -->
+    <string name="xiaomi_select_rom">Seleccionar ROM .tgz</string>
+    <string name="xiaomi_extracting">Extrayendo ROM…</string>
+    <string name="xiaomi_flash">Flashear ROM</string>
+    <string name="xiaomi_unlock">Desbloquear Bootloader</string>
+
+    <!-- Social Media -->
+    <string name="social_github">GitHub</string>
+    <string name="social_telegram">Telegram</string>
+    <string name="social_email">Email</string>
+    <string name="social_github_url">https://github.com/MichaelARC-NI</string>
+    <string name="social_telegram_url">https://t.me/ErosMobileTool</string>
+    <string name="social_email_addr">michael@example.com</string>
+
+    <!-- About -->
+    <string name="about_title">Acerca de Terminal Master Hub</string>
+    <string name="about_version">v1.0</string>
+    <string name="about_author">MichaelARC-NI</string>
+</resources>

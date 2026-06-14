@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/terminal_bg_dark">
+
+    <LinearLayout
+        android:id="@+id/xiaomiToolbar"
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:background="@color/terminal_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Xiaomi MiTool (Auto-Flasher)"
+            android:textColor="@color/session_xiaomi"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/xiaomiDeviceStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="8dp"
+            android:text="@string/fastboot_no_device"
+            android:textColor="@color/terminal_red"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Paso 1: Seleccionar ROM -->
+    <LinearLayout
+        android:id="@+id/xiaomiStep1"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp"
+        app:layout_constraintTop_toBottomOf="@id/xiaomiToolbar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Paso 1: Seleccionar ROM Fastboot (.tgz)"
+            android:textColor="@color/terminal_cyan"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/border_card"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="8dp">
+
+            <TextView
+                android:id="@+id/xiaomiRomPath"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="middle"
+                android:singleLine="true"
+                android:text="Ninguna ROM seleccionada"
+                android:textColor="@color/terminal_text"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnXiaomiBrowse"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="Examinar"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Paso 2: Extraer ROM -->
+    <LinearLayout
+        android:id="@+id/xiaomiStep2"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp"
+        app:layout_constraintTop_toBottomOf="@id/xiaomiStep1"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Paso 2: Extraer y analizar"
+            android:textColor="@color/terminal_cyan"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <ProgressBar
+            android:id="@+id/xiaomiProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="24dp"
+            android:layout_marginTop="6dp"
+            android:progressTint="@color/session_xiaomi"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/xiaomiStatusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text=""
+            android:textColor="@color/terminal_amber"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Paso 3: Acciones -->
+    <LinearLayout
+        android:id="@+id/xiaomiStep3"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        app:layout_constraintTop_toBottomOf="@id/xiaomiStep2"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <Button
+            android:id="@+id/btnXiaomiExtract"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="Extraer ROM"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btnXiaomiFlash"
+            style="@style/Widget.Material3.Button"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:enabled="false"
+            android:text="Flashear ROM"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Log de operaciones -->
+    <TextView
+        android:id="@+id/xiaomiLogLabel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="12dp"
+        android:paddingTop="4dp"
+        android:text="Log:"
+        android:textColor="@color/terminal_amber"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        app:layout_constraintTop_toBottomOf="@id/xiaomiStep3"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <ScrollView
+        android:id="@+id/xiaomiLogScroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_margin="8dp"
+        android:background="@color/terminal_bg"
+        android:padding="6dp"
+        app:layout_constraintTop_toBottomOf="@id/xiaomiLogLabel"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/xiaomiLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textColor="@color/terminal_text"
+            android:textSize="11sp" />
+    </ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

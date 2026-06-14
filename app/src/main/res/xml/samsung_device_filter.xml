@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    USB Device Filter para Samsung Download Mode (Odin3)
+    VID 0x04E8 (Samsung Electronics)
+    PID 0x685D (Samsung Download Mode / Odin3)
+    PID 0x6860 (Samsung Download Mode)
+    PID 0x68C3 (Samsung USB Composite)
+-->
+<resources>
+    <!-- Samsung Electronics Co., Ltd -->
+    <usb-device vendor-id="1256" />
+    <!-- Samsung con PID específicos de Download Mode -->
+    <usb-device vendor-id="1256" product-id="26717" />
+    <usb-device vendor-id="1256" product-id="26720" />
+    <usb-device vendor-id="1256" product-id="26819" />
+</resources>
