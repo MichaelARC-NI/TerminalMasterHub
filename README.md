@@ -90,14 +90,14 @@ La aplicación solicita los siguientes permisos:
 ### Descargar APK
 
 1. Ve a la sección **[Releases](https://github.com/MichaelARC-NI/TerminalMasterHub/releases)** de este repositorio
-2. Descarga el archivo `TerminalMasterHub-v1.3-debug.apk` (o la versión más reciente)
+2. Descarga el archivo `TerminalMasterHub-v1.3.1-debug.apk` (o la versión más reciente)
 3. Ábrelo desde el gestor de archivos
 4. Concede permiso "Instalar apps desconocidas" si lo solicita
 5. Toca **Instalar**
 
 > **Nota**: Si tu dispositivo bloquea la instalación (HyperOS, MIUI, ColorOS, OneUI), usa ADB:
 > ```bash
-> adb install TerminalMasterHub-v1.3-debug.apk
+> adb install TerminalMasterHub-v1.3.1-debug.apk
 > ```
 
 ### Compilar desde código fuente

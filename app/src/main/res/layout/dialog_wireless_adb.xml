@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="@color/terminal_bg">
+
+    <!-- Tabs: Pairing / Connect -->
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/wirelessTabLayout"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:background="@color/terminal_bg_dark"
+        app:tabIndicatorColor="@color/session_fastboot"
+        app:tabSelectedTextColor="@color/session_fastboot"
+        app:tabTextColor="@color/terminal_text">
+
+        <com.google.android.material.tabs.TabItem
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Vincular (Pair)" />
+
+        <com.google.android.material.tabs.TabItem
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Conectar" />
+
+    </com.google.android.material.tabs.TabLayout>
+
+    <!-- Panel de contenido intercambiable -->
+    <LinearLayout
+        android:id="@+id/wirelessPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingTop="12dp">
+
+        <!-- Campo: Dispositivos recientes -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Dispositivos recientes:"
+            android:textColor="@color/terminal_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace" />
+
+        <Spinner
+            android:id="@+id/recentDevicesSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:background="@color/terminal_bg_dark"
+            android:textColor="@color/terminal_text"
+            android:layout_marginBottom="8dp" />
+
+        <!-- IP -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Direccion IP:"
+            android:textColor="@color/terminal_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginTop="4dp" />
+
+        <EditText
+            android:id="@+id/wirelessIpInput"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:background="@color/terminal_bg_dark"
+            android:textColor="@color/terminal_text"
+            android:textColorHint="@color/divider"
+            android:hint="192.168.1.100"
+            android:inputType="phone"
+            android:paddingHorizontal="8dp"
+            android:fontFamily="monospace" />
+
+        <!-- Puerto -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Puerto:"
+            android:textColor="@color/terminal_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginTop="4dp" />
+
+        <EditText
+            android:id="@+id/wirelessPortInput"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:background="@color/terminal_bg_dark"
+            android:textColor="@color/terminal_text"
+            android:textColorHint="@color/divider"
+            android:hint="5555"
+            android:inputType="number"
+            android:paddingHorizontal="8dp"
+            android:fontFamily="monospace" />
+
+        <!-- Codigo (solo visible en modo Pairing) -->
+        <TextView
+            android:id="@+id/codeLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Codigo de 6 digitos:"
+            android:textColor="@color/terminal_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginTop="4dp"
+            android:visibility="gone" />
+
+        <EditText
+            android:id="@+id/wirelessCodeInput"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:background="@color/terminal_bg_dark"
+            android:textColor="@color/terminal_text"
+            android:textColorHint="@color/divider"
+            android:hint="123456"
+            android:inputType="number"
+            android:paddingHorizontal="8dp"
+            android:fontFamily="monospace"
+            android:visibility="gone" />
+
+        <!-- Boton de accion -->
+        <Button
+            android:id="@+id/btnWirelessAction"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="12dp"
+            android:backgroundTint="@color/session_fastboot"
+            android:text="Conectar"
+            android:textColor="@color/black"
+            android:textStyle="bold" />
+
+        <!-- Boton generar claves -->
+        <Button
+            android:id="@+id/btnGenerateKeys"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:layout_marginTop="6dp"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:text="Generar / Restablecer Claves de Seguridad"
+            android:textColor="@color/terminal_amber"
+            android:textSize="11sp" />
+
+    </LinearLayout>
+
+</LinearLayout>

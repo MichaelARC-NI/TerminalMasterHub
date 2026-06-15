@@ -8,21 +8,22 @@ import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
+import android.widget.Toast
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.terminalmasterhub.R
 import com.terminalmasterhub.TerminalMasterHubApp
 import com.terminalmasterhub.core.adb.FastbootClient
-import com.terminalmasterhub.core.usb.UsbBroadcastReceiver
 import com.terminalmasterhub.core.usb.UsbManagerCore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -32,11 +33,10 @@ import java.io.File
 /**
  * Fragmento de Fastboot puro — sesion independiente solo para bootloader.
  *
- * Maneja el flujo completo de permisos USB:
- * 1. Detecta dispositivos en modo fastboot
- * 2. Solicita permiso al usuario via PendingIntent (FLAG_MUTABLE)
- * 3. Espera la respuesta del BroadcastReceiver
- * 4. Si concedido, inicia conexion Fastboot + consulta de variables
+ * v1.3.1 Fixes:
+ * - Todo I/O USB corre en Dispatchers.IO
+ * - BroadcastReceiver registrado con ContextCompat
+ * - Try-catch en todas las operaciones USB
  */
 class FastbootFragment : Fragment() {
 
@@ -62,7 +62,7 @@ class FastbootFragment : Fragment() {
             uri?.let {
                 val path = uri.path?.substringAfter(":")?.let { "/storage/emulated/0/$it" }
                 if (path != null) {
-                    lifecycleScope.launch { flashImage(path) }
+                    lifecycleScope.launch(Dispatchers.IO) { flashImageSafe(path) }
                 }
             }
         }
@@ -91,12 +91,11 @@ class FastbootFragment : Fragment() {
         setupListeners()
         setupUsbReceiver()
         appendLog("Fastboot listo. Conecta un dispositivo en modo bootloader.")
-        appendLog("Comandos: devices, flash, reboot, oem unlock, getvar all")
     }
 
     override fun onResume() {
         super.onResume()
-        lifecycleScope.launch { checkFastbootDevices() }
+        lifecycleScope.launch(Dispatchers.IO) { checkFastbootDevices() }
     }
 
     override fun onPause() {
@@ -105,9 +104,13 @@ class FastbootFragment : Fragment() {
 
     private fun setupListeners() {
         btnDevices.setOnClickListener {
-            lifecycleScope.launch {
-                requestUsbPermission()
-                runFastbootCommand("devices")
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    requestUsbPermissionSafe()
+                    runFastbootCommand("devices")
+                } catch (e: Exception) {
+                    showToastSafe("Error: ${e.message}")
+                }
             }
         }
 
@@ -116,194 +119,234 @@ class FastbootFragment : Fragment() {
             MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Reiniciar dispositivo")
                 .setItems(options) { _, which ->
-                    lifecycleScope.launch { runFastbootCommand(options[which]) }
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        try { runFastbootCommand(options[which]) } catch (e: Exception) { showToastSafe("Error: ${e.message}") }
+                    }
                 }
                 .show()
         }
 
-        btnFlash.setOnClickListener {
-            showFlashDialog()
-        }
+        btnFlash.setOnClickListener { showFlashDialog() }
 
         btnGetvar.setOnClickListener {
-            lifecycleScope.launch { runFastbootCommand("getvar all") }
+            lifecycleScope.launch(Dispatchers.IO) {
+                try { runFastbootCommand("getvar all") } catch (e: Exception) { showToastSafe("Error: ${e.message}") }
+            }
         }
 
         btnOem.setOnClickListener {
             val oemCmds = arrayOf(
-                "oem device-info",
-                "oem unlock",
-                "oem lock",
-                "flashing unlock",
-                "flashing lock",
-                "oem edl"
+                "oem device-info", "oem unlock", "oem lock",
+                "flashing unlock", "flashing lock", "oem edl"
             )
             MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Comandos OEM")
                 .setItems(oemCmds) { _, which ->
-                    lifecycleScope.launch { runFastbootCommand(oemCmds[which]) }
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        try { runFastbootCommand(oemCmds[which]) } catch (e: Exception) { showToastSafe("Error: ${e.message}") }
+                    }
                 }
                 .show()
         }
 
-        btnSend.setOnClickListener {
-            sendFastbootCommand()
-        }
-
-        commandInput.setOnEditorActionListener { _, _, _ ->
-            sendFastbootCommand(); true
-        }
+        btnSend.setOnClickListener { sendFastbootCommand() }
+        commandInput.setOnEditorActionListener { _, _, _ -> sendFastbootCommand(); true }
     }
 
     private fun sendFastbootCommand(): Boolean {
         val input = commandInput.text.toString().trim()
         if (input.isEmpty()) return false
         commandInput.text.clear()
-        lifecycleScope.launch { runFastbootCommand(input) }
+        lifecycleScope.launch(Dispatchers.IO) {
+            try { runFastbootCommand(input) } catch (e: Exception) { showToastSafe("Error: ${e.message}") }
+        }
         return true
     }
 
-    // ===================== PERMISOS USB =====================
+    // ===================== PERMISOS USB (v1.3.1 FIX) =====================
 
     private fun setupUsbReceiver() {
-        val filter = IntentFilter().apply {
-            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
-            addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
-            addAction(UsbManagerCore.ACTION_USB_PERMISSION)
+        try {
+            val filter = IntentFilter().apply {
+                addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+                addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+                addAction(UsbManagerCore.ACTION_USB_PERMISSION)
+            }
+            ContextCompat.registerReceiver(
+                requireContext(),
+                usbReceiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        } catch (e: Exception) {
+            appendLog("Error registrando receptor USB: ${e.message}")
         }
-        requireContext().registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
     }
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
-                    val device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-                    appendLog("Dispositivo USB detectado: ${device?.productName ?: "Desconocido"}")
-                    lifecycleScope.launch { checkFastbootDevices() }
-                }
+            try {
+                when (intent.action) {
+                    UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
+                        val device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                        appendLog("USB detectado: ${device?.productName ?: "Desconocido"}")
+                        lifecycleScope.launch(Dispatchers.IO) { checkFastbootDevices() }
+                    }
 
-                UsbManager.ACTION_USB_DEVICE_DETACHED -> {
-                    fastbootConnected = false
-                    deviceStatusText.text = "Ningun dispositivo conectado"
-                    deviceStatusText.setTextColor(0xFFFF3333.toInt())
-                    appendLog("Dispositivo USB desconectado")
-                }
+                    UsbManager.ACTION_USB_DEVICE_DETACHED -> {
+                        fastbootConnected = false
+                        withContext(Dispatchers.Main) {
+                            deviceStatusText.text = "Desconectado"
+                            deviceStatusText.setTextColor(0xFFFF3333.toInt())
+                        }
+                        appendLog("USB desconectado")
+                    }
 
-                UsbManagerCore.ACTION_USB_PERMISSION -> {
-                    val device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-                    val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-                    if (granted && device != null) {
-                        appendLog("Permiso USB CONCEDIDO para: ${device.productName ?: device.deviceName}")
-                        deviceStatusText.text = "${usbCore.getVendorName(device)} (permiso OK)"
-                        deviceStatusText.setTextColor(0xFF00FF41.toInt())
-                        lifecycleScope.launch { connectToFastboot(device) }
-                    } else if (!granted) {
-                        appendLog("Permiso USB DENEGADO. No se puede acceder al dispositivo.")
-                        deviceStatusText.text = "Permiso denegado"
-                        deviceStatusText.setTextColor(0xFFFF3333.toInt())
+                    UsbManagerCore.ACTION_USB_PERMISSION -> {
+                        val device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                        val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+                        if (granted && device != null) {
+                            appendLog("Permiso USB CONCEDIDO: ${device.productName ?: device.deviceName}")
+                            withContext(Dispatchers.Main) {
+                                deviceStatusText.text = "${usbCore.getVendorName(device)} (permiso OK)"
+                                deviceStatusText.setTextColor(0xFF00FF41.toInt())
+                            }
+                            lifecycleScope.launch(Dispatchers.IO) { connectToFastbootSafe(device) }
+                        } else if (!granted) {
+                            appendLog("Permiso USB DENEGADO")
+                            withContext(Dispatchers.Main) {
+                                deviceStatusText.text = "Permiso denegado"
+                                deviceStatusText.setTextColor(0xFFFF3333.toInt())
+                            }
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                appendLog("Error en receptor USB: ${e.message}")
             }
         }
     }
 
-    private suspend fun requestUsbPermission() {
-        val devices = usbCore.getAttachedDevices()
-        val fastbootDevice = devices.values.firstOrNull { device ->
-            usbCore.isFastbootMode(device)
-        }
-        if (fastbootDevice != null) {
-            val usbManager = requireContext().getSystemService(Context.USB_SERVICE) as UsbManager
-            if (!usbManager.hasPermission(fastbootDevice)) {
-                appendLog("Solicitando permiso USB para: ${fastbootDevice.productName ?: fastbootDevice.deviceName}")
-                usbCore.requestPermission(fastbootDevice)
+    private suspend fun requestUsbPermissionSafe() {
+        try {
+            val devices = usbCore.getAttachedDevices()
+            val fbDevice = devices.values.firstOrNull { usbCore.isFastbootMode(it) }
+            if (fbDevice != null) {
+                val usbManager = requireContext().getSystemService(Context.USB_SERVICE) as UsbManager
+                if (!usbManager.hasPermission(fbDevice)) {
+                    appendLog("Solicitando permiso USB...")
+                    usbCore.requestPermission(fbDevice)
+                }
             }
+        } catch (e: Exception) {
+            appendLog("Error solicitando permiso USB: ${e.message}")
         }
     }
 
-    // ===================== DETECCION DE DISPOSITIVOS =====================
+    // ===================== DETECCION (IO Thread) =====================
 
     private suspend fun checkFastbootDevices() {
-        val devices = usbCore.getAttachedDevices()
-        val fastbootDevice = devices.values.firstOrNull { device ->
-            usbCore.isFastbootMode(device)
-        }
+        try {
+            val devices = usbCore.getAttachedDevices()
+            val fbDevice = devices.values.firstOrNull { usbCore.isFastbootMode(it) }
 
-        if (fastbootDevice != null) {
-            val usbManager = requireContext().getSystemService(Context.USB_SERVICE) as UsbManager
-            if (usbManager.hasPermission(fastbootDevice)) {
-                deviceStatusText.text = "${usbCore.getVendorName(fastbootDevice)} - permiso OK"
-                deviceStatusText.setTextColor(0xFF00FF41.toInt())
-                appendLog("Dispositivo Fastboot: ${fastbootDevice.productName ?: fastbootDevice.deviceName}")
-                appendLog("Permiso USB ya concedido. Conectando...")
-                connectToFastboot(fastbootDevice)
-            } else {
-                deviceStatusText.text = "${usbCore.getVendorName(fastbootDevice)} - sin permiso"
-                deviceStatusText.setTextColor(0xFFFFB000.toInt())
-                appendLog("Dispositivo Fastboot detectado: ${fastbootDevice.productName ?: fastbootDevice.deviceName}")
-                appendLog("Solicitando permiso USB al usuario...")
-                usbCore.requestPermission(fastbootDevice)
+            withContext(Dispatchers.Main) {
+                if (fbDevice != null) {
+                    val usbManager = requireContext().getSystemService(Context.USB_SERVICE) as UsbManager
+                    if (usbManager.hasPermission(fbDevice)) {
+                        deviceStatusText.text = "${usbCore.getVendorName(fbDevice)} - permiso OK"
+                        deviceStatusText.setTextColor(0xFF00FF41.toInt())
+                        appendLog("Fastboot detectado: ${fbDevice.productName ?: fbDevice.deviceName}")
+                        appendLog("Permiso OK. Conectando...")
+                        lifecycleScope.launch(Dispatchers.IO) { connectToFastbootSafe(fbDevice) }
+                    } else {
+                        deviceStatusText.text = "${usbCore.getVendorName(fbDevice)} - sin permiso"
+                        deviceStatusText.setTextColor(0xFFFFB000.toInt())
+                        appendLog("Fastboot detectado. Solicitando permiso USB...")
+                        usbCore.requestPermission(fbDevice)
+                    }
+                } else {
+                    deviceStatusText.text = "Desconectado"
+                    deviceStatusText.setTextColor(0xFFFF3333.toInt())
+                    fastbootConnected = false
+                }
             }
-        } else {
-            deviceStatusText.text = "Ningun dispositivo conectado"
-            deviceStatusText.setTextColor(0xFFFF3333.toInt())
-            fastbootConnected = false
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                appendLog("Error: ${e.message}")
+            }
         }
     }
 
-    private suspend fun connectToFastboot(device: UsbDevice) {
-        appendLog("Iniciando conexion Fastboot con ${device.productName ?: device.deviceName}...")
-        fastbootConnected = fastbootClient.connect()
-        if (fastbootConnected) {
-            appendLog("Fastboot conectado exitosamente")
-            deviceStatusText.text = "${usbCore.getVendorName(device)} - Fastboot OK"
-            deviceStatusText.setTextColor(0xFF00FF41.toInt())
-            // Mostrar info basica del dispositivo
-            val info = fastbootClient.getDeviceInfo()
-            appendLog("Producto: ${info["product"] ?: "N/A"}")
-            appendLog("Bootloader: ${info["version-bootloader"] ?: "N/A"}")
-        } else {
-            appendLog("No se pudo conectar en modo Fastboot.")
-            deviceStatusText.text = "${usbCore.getVendorName(device)} - error conexion"
-            deviceStatusText.setTextColor(0xFFFF3333.toInt())
+    private suspend fun connectToFastbootSafe(device: UsbDevice) {
+        try {
+            appendLog("Conectando Fastboot a ${device.productName ?: device.deviceName}...")
+            fastbootConnected = fastbootClient.connect()
+            withContext(Dispatchers.Main) {
+                if (fastbootConnected) {
+                    appendLog("Fastboot conectado")
+                    deviceStatusText.text = "${usbCore.getVendorName(device)} - Fastboot OK"
+                    deviceStatusText.setTextColor(0xFF00FF41.toInt())
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        try {
+                            val info = fastbootClient.getDeviceInfo()
+                            withContext(Dispatchers.Main) {
+                                appendLog("Producto: ${info["product"] ?: "N/A"}")
+                                appendLog("Bootloader: ${info["version-bootloader"] ?: "N/A"}")
+                            }
+                        } catch (_: Exception) {}
+                    }
+                } else {
+                    appendLog("No se pudo conectar Fastboot")
+                    deviceStatusText.text = "${usbCore.getVendorName(device)} - error"
+                    deviceStatusText.setTextColor(0xFFFF3333.toInt())
+                }
+            }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                appendLog("Error: ${e.message}")
+            }
         }
     }
 
-    // ===================== COMANDOS FASTBOOT =====================
+    // ===================== COMANDOS =====================
 
     private suspend fun runFastbootCommand(command: String) {
-        appendLog("fastboot $command")
+        withContext(Dispatchers.Main) { appendLog("fastboot $command") }
 
         if (!fastbootConnected) {
-            requestUsbPermission()
-            val success = fastbootClient.connect()
-            if (!success) {
-                appendLog("Error: No hay dispositivo Fastboot conectado.")
-                appendLog("Verifica que el dispositivo este en modo bootloader.")
+            try {
+                requestUsbPermissionSafe()
+                fastbootConnected = fastbootClient.connect()
+                if (!fastbootConnected) {
+                    withContext(Dispatchers.Main) {
+                        appendLog("Error: No hay dispositivo Fastboot. Verifica modo bootloader.")
+                    }
+                    return
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { appendLog("Error: ${e.message}") }
                 return
             }
-            fastbootConnected = true
         }
 
-        val result = fastbootClient.sendCommand(command)
-        if (result != null) {
-            appendLog(result)
-        } else {
-            appendLog("Error: Sin respuesta del dispositivo")
+        try {
+            val result = fastbootClient.sendCommand(command)
+            withContext(Dispatchers.Main) {
+                if (result != null) appendLog(result) else appendLog("Error: Sin respuesta")
+            }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) { appendLog("Error: ${e.message}") }
         }
     }
 
     private fun showFlashDialog() {
         val partitions = arrayOf("boot", "recovery", "system", "vendor", "dtbo", "vbmeta", "super", "userdata")
         var selectedPartition = "boot"
-
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Flashear imagen Fastboot")
             .setMessage("Selecciona la particion y luego el archivo .img")
-            .setSingleChoiceItems(partitions, 0) { _, which ->
-                selectedPartition = partitions[which]
-            }
+            .setSingleChoiceItems(partitions, 0) { _, which -> selectedPartition = partitions[which] }
             .setPositiveButton("Seleccionar archivo") { _, _ ->
                 val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
@@ -315,35 +358,36 @@ class FastbootFragment : Fragment() {
             .show()
     }
 
-    private suspend fun flashImage(imagePath: String) {
-        appendLog("Flasheando: $imagePath")
-        val file = File(imagePath)
-        if (!file.exists()) {
-            appendLog("Error: Archivo no encontrado")
-            return
-        }
-
-        withContext(Dispatchers.IO) {
+    private suspend fun flashImageSafe(imagePath: String) {
+        try {
+            val file = File(imagePath)
+            if (!file.exists()) {
+                withContext(Dispatchers.Main) { appendLog("Error: Archivo no encontrado") }
+                return
+            }
+            appendLog("Flasheando: $imagePath")
             val success = fastbootClient.flashPartition("boot", file) { sent, total ->
                 val pct = if (total > 0) (sent * 100 / total) else 0
                 appendLog("Progreso: $pct% ($sent/$total bytes)")
             }
-
             withContext(Dispatchers.Main) {
-                if (success) {
-                    appendLog("Flasheo completado")
-                } else {
-                    appendLog("Error durante el flasheo")
-                }
+                if (success) appendLog("Flasheo completado") else appendLog("Error durante el flasheo")
             }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) { appendLog("Error: ${e.message}") }
         }
     }
 
     private fun appendLog(text: String) {
         requireActivity().runOnUiThread {
             logView.append("$text\n")
-            val scrollView = view?.findViewById<android.widget.ScrollView>(R.id.fastbootLogScroll)
-            scrollView?.fullScroll(View.FOCUS_DOWN)
+            view?.findViewById<android.widget.ScrollView>(R.id.fastbootLogScroll)?.fullScroll(View.FOCUS_DOWN)
+        }
+    }
+
+    private suspend fun showToastSafe(msg: String) {
+        withContext(Dispatchers.Main) {
+            try { Toast.makeText(context, msg, Toast.LENGTH_LONG).show() } catch (_: Exception) {}
         }
     }
 
