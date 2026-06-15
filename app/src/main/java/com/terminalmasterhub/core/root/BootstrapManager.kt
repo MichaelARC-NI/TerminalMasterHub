@@ -407,7 +407,7 @@ exec ${'$'}PREFIX/bin/bash
                 val pm = ProotManager(context)
                 if (pm.isProotAvailable() && pm.isUbuntuInstalled()) {
                     val result = pm.executeInProot(command, h)
-                    return result
+                    return@withContext result
                 }
             } catch (_: Exception) {}
         }
@@ -439,7 +439,7 @@ exec ${'$'}PREFIX/bin/bash
      * Si el comando es un wrapper en \$PREFIX/bin/, lo ejecuta via 'sh'.
      */
     private fun resolveCommand(cmd: String, prefixPath: String): String {
-        val firstWord = cmd.split("\s+".toRegex()).firstOrNull() ?: return cmd
+        val firstWord = cmd.split(Regex("\\s+")).firstOrNull() ?: return cmd
         val wrapper = File("$prefixPath/bin/$firstWord")
         if (wrapper.exists() && !wrapper.canExecute()) {
             // Wrapper existe pero no es ejecutable -> ejecutar via sh

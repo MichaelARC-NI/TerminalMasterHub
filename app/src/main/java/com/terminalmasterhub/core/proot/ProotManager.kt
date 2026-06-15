@@ -127,13 +127,13 @@ class ProotManager(private val context: Context) {
 # PRoot wrapper - Terminal Master Hub
 # Usa linker64 para evitar restricciones noexec en /data/data/
 PROOT_BIN="${prootBin.absolutePath}"
-if [ -f "\$PROOT_BIN" ]; then
+if [ -f "${'$'}PROOT_BIN" ]; then
     # Intentar ejecucion directa (Android <14)
-    if exec "\$PROOT_BIN" "\$@" 2>/dev/null; then
-        exit \$?
+    if exec "${'$'}PROOT_BIN" "${'$'}@" 2>/dev/null; then
+        exit ${'$'}?
     fi
     # Fallback: usar sh o linker
-    /system/bin/sh -c "\$PROOT_BIN \$*" 2>/dev/null || {
+    /system/bin/sh -c "${'$'}PROOT_BIN ${'$'}*" 2>/dev/null || {
         echo "PRoot: No se puede ejecutar en este dispositivo"
         echo "PRoot: Instala Termux para el entorno completo"
         exit 1
