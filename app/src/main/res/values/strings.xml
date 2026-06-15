@@ -10,18 +10,26 @@
 
     <!-- Terminal -->
     <string name="terminal_hint">Escribe un comando…</string>
+    <string name="terminal_clear">Limpiar</string>
+    <string name="terminal_run_py">Ejecutar Python</string>
 
     <!-- Fastboot -->
     <string name="fastboot_no_device">Ningún dispositivo conectado</string>
+    <string name="fastboot_connected">Dispositivo conectado</string>
     <string name="fastboot_send_command">Enviar comando</string>
+    <string name="fastboot_flash">Flashear imagen</string>
 
     <!-- Samsung -->
     <string name="samsung_no_device">Conecta un Samsung en Download Mode</string>
+    <string name="samsung_select_tar">Seleccionar archivo .tar / .tar.md5</string>
     <string name="samsung_flash">Iniciar Flasheo</string>
+    <string name="samsung_reboot">Reiniciar a Sistema</string>
 
     <!-- Xiaomi -->
     <string name="xiaomi_select_rom">Seleccionar ROM .tgz</string>
+    <string name="xiaomi_extracting">Extrayendo ROM…</string>
     <string name="xiaomi_flash">Flashear ROM</string>
+    <string name="xiaomi_unlock">Desbloquear Bootloader</string>
 
     <!-- Developer Info -->
     <string name="dev_name">Michael Antonio Rodriguez Condega</string>
