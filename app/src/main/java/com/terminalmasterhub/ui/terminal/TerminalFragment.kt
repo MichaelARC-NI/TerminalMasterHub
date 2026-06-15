@@ -184,7 +184,13 @@ Comandos:
             .setMessage(social)
             .setPositiveButton("OK", null)
             .setNeutralButton("GitHub") { _, _ ->
-                runShell("android.content.Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/$DEV_GITHUB")).also { startActivity(it) } android.intent.action.VIEW -d https://github.com/$DEV_GITHUB")
+                try {
+                    val intent = android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("https://github.com/MichaelARC-NI")
+                    )
+                    startActivity(intent)
+                } catch (e: Exception) { }
             }
             .show()
     }
