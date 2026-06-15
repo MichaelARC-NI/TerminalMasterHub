@@ -10,6 +10,9 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowCompat
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.snackbar.Snackbar
@@ -52,6 +55,9 @@ class MainActivity : AppCompatActivity() {
         viewPager = findViewById(R.id.sessionPager)
         bottomNav = findViewById(R.id.bottomNavigation)
 
+        // Edge-to-Edge: manejar WindowInsets para Android 16
+        setupEdgeToEdge()
+
         setupViewPager()
         setupBottomNav()
         requestRequiredPermissions()
@@ -61,6 +67,29 @@ class MainActivity : AppCompatActivity() {
 
         // Verificar dispositivos USB conectados al inicio
         checkUsbDevices()
+    }
+
+    // ===================== EDGE-TO-EDGE (Android 16) =====================
+
+    private fun setupEdgeToEdge() {
+        val rootView = findViewById<android.view.View>(R.id.mainContainer)
+        // Aplicar padding dinamico para status bar y navigation bar
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, insets ->
+            val systemBars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars()
+                        or WindowInsetsCompat.Type.displayCutout()
+            )
+            // Padding superior para la barra de estado
+            view.setPadding(
+                view.paddingLeft,
+                systemBars.top.coerceAtLeast(0),
+                view.paddingRight,
+                systemBars.bottom.coerceAtLeast(0)
+            )
+            insets
+        }
+        // Solicitar layout edge-to-edge (contenido detras de barras)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
     }
 
     override fun onDestroy() {

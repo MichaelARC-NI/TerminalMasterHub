@@ -139,18 +139,22 @@ class AdbConsoleFragment : Fragment() {
     // ===================== WIRELESS ADB =====================
 
     private fun openWirelessDialog() {
-        WirelessAdbDialog(
-            context = requireContext(),
-            lifecycleScope = lifecycleScope,
-            onConnected = { ip, port ->
-                wirelessConnected = true
-                wirelessClient = com.terminalmasterhub.core.wireless.WirelessAdbClient(requireContext())
-                deviceStatusText.text = "WiFi: $ip:$port"
-                deviceStatusText.setTextColor(0xFF3399FF.toInt())
-                appendLog("ADB Inalambrico: Conectado a $ip:$port")
-            },
-            onLog = { msg -> appendLog(msg) }
-        ).show()
+        try {
+            WirelessAdbDialog(
+                activity = requireActivity(),
+                lifecycleScope = lifecycleScope,
+                onConnected = { ip, port ->
+                    wirelessConnected = true
+                    wirelessClient = com.terminalmasterhub.core.wireless.WirelessAdbClient(requireContext())
+                    deviceStatusText.text = "WiFi: $ip:$port"
+                    deviceStatusText.setTextColor(0xFF3399FF.toInt())
+                    appendLog("ADB Inalambrico: Conectado a $ip:$port")
+                },
+                onLog = { msg -> appendLog(msg) }
+            ).show()
+        } catch (e: Exception) {
+            appendLog("Error al abrir dialogo Wireless: ${e.message}")
+        }
     }
 
     private fun autoGenerateKeys() {
