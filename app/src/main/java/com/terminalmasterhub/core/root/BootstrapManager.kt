@@ -90,7 +90,7 @@ class BootstrapManager(private val context: Context) {
                 "export LANG=en_US.UTF-8",
                 "export LC_ALL=C",
                 "",
-                # Fuentear .bashrc si existe
+                "# Fuentear .bashrc si existe"
                 "if [ -f \"\$HOME/.bashrc\" ]; then",
                 "    . \"\$HOME/.bashrc\"",
                 "fi",
