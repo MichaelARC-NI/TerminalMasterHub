@@ -111,7 +111,7 @@ class TerminalFragment : Fragment() {
         val bootstrapBadge = if (bootstrapManager.isInstalled()) " [LINUX]" else ""
 
         val welcome = """
-Terminal Master Hub v1.3.6
+Terminal Master Hub v1.3.7
 Terminal Linux + Python IDE + Root Tools
 by $DEV_NAME
 
@@ -221,7 +221,7 @@ Comandos:
         val about = """
 $DEV_NAME
 
-Terminal Master Hub v1.3.6
+Terminal Master Hub v1.3.7
 
 App Android todo-en-uno:
 ✓ Terminal Linux (sin root)
@@ -309,24 +309,30 @@ App Android todo-en-uno:
         appendOutput("")
         appendOutput("Entorno Ubuntu 24.04 completo para ARM64 usando PRoot.")
         appendOutput("Basado en el enfoque de Termux y Kali NetHunter.")
-        appendOutput("PRoot y Ubuntu rootfs vienen EMBEBIDOS en la aplicacion.")
         appendOutput("")
 
-        // Verificar si los assets existen
+        // Verificar assets y conectividad
         val hasAssets = try {
             requireContext().assets.open("ubuntu/ubuntu-rootfs.tar.gz").use { true }
         } catch (e: Exception) { false }
 
-        if (!hasAssets) {
-            appendOutput("Nota: Assets embebidos no encontrados.")
-            appendOutput("Se descargaran desde internet (~30MB).")
+        if (hasAssets) {
+            appendOutput("✅ Assets embebidos encontrados! Extrayendo...")
+        } else {
+            appendOutput("⚠️ Assets embebidos NO encontrados.")
+            appendOutput("   Se intentara descargar desde internet.")
             if (!prootManager.isNetworkAvailable()) {
-                appendOutput("ERROR: No hay conexion a internet y no hay assets.")
-                appendOutput("Reinstala la aplicacion desde GitHub Releases.")
+                appendOutput("")
+                appendOutput("❌ Sin assets y sin internet.")
+                appendOutput("   Descarga la ultima version desde:")
+                appendOutput("   https://github.com/MichaelARC-NI/TerminalMasterHub/releases")
+                appendOutput("")
+                appendOutput("   O instala manualmente copiando los archivos:")
+                appendOutput("   1. Descarga ubuntu-base-24.04.4-base-arm64.tar.gz")
+                appendOutput("   2. Colocalo en: /sdcard/ubuntu-rootfs.tar.gz")
+                appendOutput("   3. Reintenta el comando")
                 return
             }
-        } else {
-            appendOutput("✅ Assets embebidos encontrados! No se necesita descarga.")
         }
         appendOutput("")
 
@@ -334,15 +340,24 @@ App Android todo-en-uno:
             appendOutput("  [$pct%] $msg")
         }
 
-        // Instalar PRoot + Ubuntu (extrae desde assets o descarga)
-        val ok = prootManager.installAll()
-        if (!ok) {
-            appendOutput("")
-            appendOutput("❌ Error durante la instalacion.")
-            appendOutput("  Verifica que tu dispositivo sea ARM64 (aarch64)")
-            appendOutput("  y que tengas al menos 200MB de espacio libre.")
+        // Instalar PRoot (assets primero, descarga como fallback)
+        appendOutput("Paso 1/2: Instalando PRoot...")
+        val prootOk = prootManager.installProot()
+        if (!prootOk) {
+            appendOutput("  Error instalando PRoot")
             return
         }
+        appendOutput("  PRoot instalado!")
+
+        // Instalar Ubuntu (assets primero, descarga como fallback)
+        appendOutput("")
+        appendOutput("Paso 2/2: Instalando Ubuntu 24.04 ARM64...")
+        val ubuntuOk = prootManager.installUbuntuRootfs()
+        if (!ubuntuOk) {
+            appendOutput("  Error instalando Ubuntu rootfs")
+            return
+        }
+        appendOutput("  Ubuntu ARM64 instalado!")
 
         appendOutput("")
         appendOutput("✅ Instalacion completada exitosamente!")

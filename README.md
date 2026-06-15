@@ -333,3 +333,33 @@ El `PYTHONPATH` se configura automáticamente para que Python encuentre estos m�
 - ✅ Botón "Conectar Dispositivo" explícito
 
 ---
+
+## 🐧 Ubuntu ARM64 Integrado (PRoot)
+
+**Terminal Master Hub** incluye un entorno **Ubuntu 24.04 LTS ARM64** completo, embebido directamente en los assets de la aplicación:
+
+### 🚀 Características
+- **Ubuntu rootfs + PRoot** vienen dentro del APK (~38MB total)
+- **No necesita descarga** — se extrae automáticamente de los assets
+- **PRoot** para entornos chroot sin necesidad de root
+- **linker64** para compatibilidad con Android 14+ (noexec)
+- **apt, python3, cmus, pip** preinstalados
+
+### 📋 Cómo Usar
+```
+bootstrap proot install    # Extrae Ubuntu desde los assets
+mode ubuntu                # Activa modo Ubuntu (PRoot)
+apt update                 # Actualizar paquetes
+apt install python3 cmus   # Instalar lo que necesites
+python3                    # Python en Ubuntu
+cmus                       # Reproductor de música
+mode local                 # Volver al modo local
+```
+
+### 📦 Cambios v1.3.6
+- ✅ Ubuntu 24.04 ARM64 rootfs embebido en `assets/`
+- ✅ PRoot binary para ARM64 desde Termux repos
+- ✅ Ejecución via `/system/bin/linker64` para Android 14+
+- ✅ `bootstrap proot install` funciona sin descarga
+- ✅ Comandos: `mode ubuntu`, `mode local`, `ubuntu install`
+- ✅ `apt update/install` manejados correctamente

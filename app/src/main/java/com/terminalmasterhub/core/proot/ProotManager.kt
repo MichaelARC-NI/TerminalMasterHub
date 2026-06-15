@@ -12,7 +12,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Gestor de PRoot + Ubuntu ARM64 para Terminal Master Hub v1.3.6.
+ * Gestor de PRoot + Ubuntu ARM64 para Terminal Master Hub v1.3.7.
  *
  * Proporciona un entorno Linux completo (Ubuntu 24.04 ARM64)
  * usando PRoot para evitar necesidad de root.
@@ -127,23 +127,38 @@ class ProotManager(private val context: Context) {
             prootDir.mkdirs()
             val prootBin = getProotBinary()
 
-            // Intentar 1: Extraer desde assets
-            onProgress?.invoke("Extrayendo PRoot desde assets...", 20)
-            try {
-                context.assets.open(PROOT_ASSET).use { input ->
-                    prootBin.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                onProgress?.invoke("PRoot extraido de assets!", 40)
-            } catch (e: Exception) {
-                // Fallback: Descargar .deb de Termux
-                onProgress?.invoke("Assets no disponible. Descargando PRoot...", 20)
+            // Intentar 1: Extraer desde assets (embebido en APK)
+            if (!prootBin.exists()) {
+                onProgress?.invoke("Buscando PRoot en assets...", 10)
                 try {
-                    downloadAndExtractProot(prootDir)
-                } catch (e2: Exception) {
-                    onProgress?.invoke("Error: No se pudo obtener PRoot: ${e2.message}", 40)
-                    return@withContext false
+                    context.assets.open(PROOT_ASSET).use { input ->
+                        prootBin.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    onProgress?.invoke("PRoot extraido de assets!", 30)
+                } catch (e: Exception) {
+                    onProgress?.invoke("Assets no disponibles.", 15)
+                    
+                    // Intentar 2: Buscar en almacenamiento externo (manual)
+                    try {
+                        val manualFile = File(context.getExternalFilesDir(null), "proot-arm64")
+                        if (manualFile.exists()) {
+                            manualFile.copyTo(prootBin, overwrite = true)
+                            onProgress?.invoke("PRoot desde almacenamiento externo!", 30)
+                        } else {
+                            throw Exception("No manual file")
+                        }
+                    } catch (e2: Exception) {
+                        // Intentar 3: Descargar desde multiples fuentes
+                        onProgress?.invoke("Descargando PRoot desde internet...", 20)
+                        if (downloadProotWithFallback(prootDir)) {
+                            onProgress?.invoke("PRoot descargado!", 30)
+                        } else {
+                            onProgress?.invoke("No se pudo obtener PRoot", 40)
+                            return@withContext false
+                        }
+                    }
                 }
             }
 
@@ -175,19 +190,52 @@ class ProotManager(private val context: Context) {
             ubuntuDir.mkdirs()
 
             // Intentar 1: Extraer desde assets
-            onProgress?.invoke("Extrayendo Ubuntu rootfs desde assets (~30MB)...", 50)
+            var extracted = false
+            onProgress?.invoke("Buscando Ubuntu rootfs en assets...", 40)
             try {
                 context.assets.open(UBUNTU_ROOTFS_ASSET).use { input ->
                     extractTarGz(input, ubuntuDir)
                 }
-                onProgress?.invoke("Ubuntu rootfs extraida de assets!", 70)
+                extracted = true
+                onProgress?.invoke("Ubuntu rootfs extraida de assets!", 60)
             } catch (e: Exception) {
-                // Fallback: Descargar desde internet
-                onProgress?.invoke("Assets no disponible. Descargando Ubuntu...", 50)
+                onProgress?.invoke("Assets no disponibles.", 45)
+            }
+
+            // Intentar 2: Buscar archivo manual en almacenamiento externo
+            if (!extracted) {
+                onProgress?.invoke("Buscando rootfs en almacenamiento...", 45)
                 try {
-                    downloadUbuntuRootfs(ubuntuDir)
-                } catch (e2: Exception) {
-                    onProgress?.invoke("Error: No se pudo obtener Ubuntu: ${e2.message}", 80)
+                    // Buscar en /sdcard/ o almacenamiento externo
+                    val storageDirs = listOf(
+                        File("/storage/emulated/0/ubuntu-rootfs.tar.gz"),
+                        File("/storage/emulated/0/Download/ubuntu-rootfs.tar.gz"),
+                        File(context.getExternalFilesDir(null), "ubuntu-rootfs.tar.gz"),
+                        File(context.getExternalCacheDir(), "ubuntu-rootfs.tar.gz")
+                    )
+                    for (f in storageDirs) {
+                        if (f.exists()) {
+                            onProgress?.invoke("Rootfs encontrada en: ${f.absolutePath}", 50)
+                            f.inputStream().use { input ->
+                                extractTarGz(input, ubuntuDir)
+                            }
+                            extracted = true
+                            onProgress?.invoke("Ubuntu rootfs extraida de almacenamiento!", 60)
+                            f.delete()
+                            break
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // Intentar 3: Descargar desde internet con multiples mirrors
+            if (!extracted) {
+                onProgress?.invoke("Descargando Ubuntu 24.04 ARM64 desde internet...", 50)
+                if (downloadUbuntuWithFallback(ubuntuDir)) {
+                    extracted = true
+                    onProgress?.invoke("Ubuntu descargado e instalado!", 65)
+                } else {
+                    onProgress?.invoke("No se pudo obtener Ubuntu rootfs", 80)
                     return@withContext false
                 }
             }
@@ -355,6 +403,69 @@ class ProotManager(private val context: Context) {
         } finally {
             tmpFile.delete()
         }
+    }
+
+    /** Descarga PRoot desde multiples fuentes */
+    private fun downloadProotWithFallback(targetDir: File): Boolean {
+        // Fuente 1: .deb de Termux
+        try {
+            onProgress?.invoke("Descargando PRoot desde Termux...", 20)
+            downloadAndExtractProot(targetDir)
+            if (getProotBinary().exists()) return true
+        } catch (e: Exception) {
+            onProgress?.invoke("Fallback 1 fallo: ${e.message}", 22)
+        }
+
+        // Fuente 2: Static binary de GitHub (fallback)
+        try {
+            onProgress?.invoke("Descargando PRoot desde GitHub...", 25)
+            val staticUrls = listOf(
+                "https://github.com/termux/proot/releases/download/v5.4.0/proot-arm64-v8a",
+                "https://raw.githubusercontent.com/termux/proot/master/proot-arm64"
+            )
+            for (url in staticUrls) {
+                try {
+                    val prootBin = getProotBinary()
+                    downloadFile(url, prootBin)
+                    if (prootBin.exists() && prootBin.length() > 1000) return true
+                } catch (_: Exception) {}
+            }
+        } catch (e: Exception) {
+            onProgress?.invoke("Fallback 2 fallo: ${e.message}", 28)
+        }
+
+        return false
+    }
+
+    /** Descarga Ubuntu rootfs desde multiples mirrors */
+    private fun downloadUbuntuWithFallback(targetDir: File): Boolean {
+        val urls = listOf(
+            "http://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz",
+            "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64-root.tar.xz",
+            "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz"
+        )
+        val tarFile = File(getProotBaseDir(), "ubuntu-rootfs.tar.gz")
+
+        for (url in urls) {
+            try {
+                onProgress?.invoke("Descargando desde: ${url.substringAfter("//").substringBefore("/")}...", 50)
+                downloadFile(url, tarFile)
+                if (tarFile.exists() && tarFile.length() > 1000000) { // > 1MB
+                    onProgress?.invoke("Extrayendo rootfs...", 60)
+                    val process = ProcessBuilder(
+                        "sh", "-c",
+                        "cd ${targetDir.absolutePath} && tar -xzf ${tarFile.absolutePath} 2>&1"
+                    ).redirectErrorStream(true).start()
+                    process.waitFor()
+                    tarFile.delete()
+                    if (File(targetDir, "etc/os-release").exists()) return true
+                }
+            } catch (e: Exception) {
+                onProgress?.invoke("Mirror fallo, intentando siguiente...", 55)
+                tarFile.delete()
+            }
+        }
+        return false
     }
 
     /** Descarga y extrae proot desde .deb de Termux */
