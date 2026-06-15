@@ -3,7 +3,7 @@ name: Build Terminal Master Hub APK
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   build:
@@ -24,29 +24,33 @@ jobs:
 
       - name: Accept Android SDK licenses
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
 
       - name: Install build tools and platform
         run: |
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" 2>/dev/null || true
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Download Ubuntu rootfs from latest release
+      - name: Download Ubuntu rootfs from release
         run: |
           echo "Downloading Ubuntu 24.04 ARM64 rootfs..."
           mkdir -p app/src/main/assets/ubuntu/
-          # Intentar descargar desde el release v1.3.8 (el rootfs esta como asset)
           ROOTFS_URL="https://github.com/MichaelARC-NI/TerminalMasterHub/releases/download/v1.3.8/ubuntu-base-24.04.4-base-arm64.tar.gz"
           ROOTFS_FILE="app/src/main/assets/ubuntu/ubuntu_rootfs"
-          curl -fSL -o "$ROOTFS_FILE" "$ROOTFS_URL" 2>&1 || {
-            echo "Fallback: copiando rootfs placeholder..."
-            # Crear un placeholder - el build fallara si no hay rootfs
-            echo "ERROR: No se pudo descargar rootfs Ubuntu" >&2
-            exit 1
+          echo "Downloading from: $ROOTFS_URL"
+          curl -fSL --retry 3 --retry-delay 5 -o "$ROOTFS_FILE" "$ROOTFS_URL" 2>&1 || {
+            echo "ERROR: No se pudo descargar rootfs Ubuntu"
+            echo "Los assets actuales se usaran si existen"
+            ls -la app/src/main/assets/ubuntu/ 2>/dev/null || true
           }
-          ls -lh "$ROOTFS_FILE"
+          if [ -f "$ROOTFS_FILE" ]; then
+            ls -lh "$ROOTFS_FILE"
+          else
+            echo "Usando assets locales si existen..."
+            ls -la app/src/main/assets/ubuntu/ 2>/dev/null || echo "No assets locales"
+          fi
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug
@@ -65,21 +69,3 @@ jobs:
         with:
           name: TerminalMasterHub-release
           path: app/build/outputs/apk/release/*.apk
-
-      - name: Create Release
-        if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ github.run_number }}
-          name: "Terminal Master Hub v${{ github.run_number }}"
-          body: |
-            ## Terminal Master Hub
-            
-            APK generado automáticamente.
-            
-            ### Redes del Desarrollador:
-            - GitHub: https://github.com/MichaelARC-NI
-            - Telegram: https://t.me/ErosMobileTool
-          files: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk

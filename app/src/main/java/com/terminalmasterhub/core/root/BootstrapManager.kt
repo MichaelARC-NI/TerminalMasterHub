@@ -6,24 +6,32 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/**
+ * Gestor del entorno Linux aislado para Terminal Master Hub v1.4.1.
+ *
+ * En Android 14+, /data/data/ se monta con noexec, lo que impide
+ * ejecutar directamente binarios almacenados ahi.
+ *
+ * Estrategia actual:
+ * 1. NO creamos scripts ejecutables en $PREFIX/bin/ (no funcionan con noexec)
+ * 2. Solo creamos archivos de configuracion (.bashrc, etc.)
+ * 3. Para ejecutar comandos Linux, usamos PRoot + Ubuntu rootfs via linker64
+ * 4. PRoot se ejecuta con /system/bin/linker64 para evitar noexec
+ *
+ * Basado en el enfoque de Termux, Kali NetHunter y PRoot.
+ */
 class BootstrapManager(private val context: Context) {
 
     companion object {
-        /** Directorio PREFIX: apunta a /data/data/com.terminalmasterhub/files/usr
-         *  Los binarios se instalan en $PREFIX/bin/
-         *  PREFIX y PATH se configuran como variables de entorno para que
-         *  apt, python, tar y las herramientas funcionen sin root. */
         const val PREFIX_DIR = "usr"
         const val HOME_DIR = "home"
 
-        /** Paquetes del sistema (wrappers) que se instalan en $PREFIX/bin/ */
         val REQUIRED_PACKAGES = listOf(
             "apt", "bash", "python3", "zstd",
             "p7zip", "tar", "unrar", "unzip",
             "nano", "neovim", "cmus"
-        )
+        ).sorted()
 
-        /** Paquetes Python (pip) instalables en $PREFIX/lib/python3/site-packages/ */
         val PYTHON_PACKAGES = listOf(
             "matplotlib", "numpy", "pillow", "pandas",
             "seaborn", "plotly", "scipy", "requests",
@@ -39,7 +47,6 @@ class BootstrapManager(private val context: Context) {
             "flake8", "mypy", "pre-commit"
         )
 
-        /** Ruta completa PREFIX usada en scripts de entorno */
         fun getPrefixPath(context: Context): String =
             File(context.filesDir, PREFIX_DIR).absolutePath
     }
@@ -60,7 +67,7 @@ class BootstrapManager(private val context: Context) {
 
     fun isInstalled(): Boolean {
         val prefix = getPrefixDir()
-        return prefix.exists() && File(prefix, "bin/bash").exists()
+        return prefix.exists() && File(prefix, HOME_DIR).exists()
     }
 
     fun getStatus(): BootstrapStatus {
@@ -69,24 +76,39 @@ class BootstrapManager(private val context: Context) {
         if (!isInstalled()) {
             return BootstrapStatus(prefixPath = p, message = "No instalado")
         }
-        val installed = REQUIRED_PACKAGES.filter { pkg ->
-            File(prefix, "bin/$pkg").exists()
-        }
-        // Contar módulos Python instalados
+        // Verificar si PRoot/Ubuntu esta instalado (ahi estan los binarios reales)
+        val ubuntuOk = try {
+            val pm = ProotManager(context)
+            pm.isUbuntuInstalled()
+        } catch (e: Exception) { false }
+
         val pySitePkgs = File(prefix, "lib/python3/site-packages")
         val pyCount = if (pySitePkgs.exists()) {
-            pySitePkgs.listFiles()?.count { it.isDirectory || it.name.endsWith(".py") || it.name.endsWith(".dist-info") } ?: 0
+            pySitePkgs.listFiles()?.count {
+                it.isDirectory || it.name.endsWith(".py") || it.name.endsWith(".dist-info")
+            } ?: 0
         } else 0
+
         return BootstrapStatus(
             isInstalled = true,
             prefixPath = p,
-            packages = installed,
+            packages = if (ubuntuOk) REQUIRED_PACKAGES else emptyList(),
             pythonPackagesInstalled = pyCount,
             totalSize = getDirSize(prefix),
-            message = "PREFIX=$p ${installed.size}/${REQUIRED_PACKAGES.size} paquetes | Python: $pyCount modulos"
+            message = buildString {
+                append("PREFIX=$p | ")
+                if (ubuntuOk) append("Ubuntu listo (${REQUIRED_PACKAGES.size} tools)")
+                else append("Usa 'bootstrap proot install' para Ubuntu")
+                if (pyCount > 0) append(" | Python: $pyCount modulos")
+            }
         )
     }
 
+    /**
+     * Instala la estructura de directorios y archivos de configuracion.
+     * NO crea scripts ejecutables (no funcionan con noexec en Android 14+).
+     * Los binarios reales se instalan via PRoot + Ubuntu rootfs.
+     */
     suspend fun install(): BootstrapStatus = withContext(Dispatchers.IO) {
         try {
             val prefix = getPrefixDir()
@@ -96,305 +118,169 @@ class BootstrapManager(private val context: Context) {
             prefix.mkdirs()
 
             onProgress?.invoke("Creando estructura de directorios...", 10)
-            for (dir in listOf("bin", "etc", "lib", "lib/python3", "lib/python3/site-packages",
-                              HOME_DIR, "home/.config/cmus", "tmp", "var/log")) {
+            for (dir in listOf(
+                "bin", "etc", "lib", "lib/python3", "lib/python3/site-packages",
+                HOME_DIR, "home/.config/cmus", "tmp", "var/log"
+            )) {
                 File(prefix, dir).mkdirs()
             }
 
-            onProgress?.invoke("Configurando bash...", 30)
-            // Script bash wrapper con entorno completo
-            val bashLines = listOf(
-                "#!/system/bin/sh",
-                "#",
-                "# Terminal Master Hub Bootstrap Shell",
-                "# Entorno aislado tipo Termux",
-                "# Incluye: cmus, Python con pip, herramientas de compresion",
-                "#",
-                "export PREFIX=$prefixPath",
-                "export PATH=$prefixPath/bin:/system/bin:/system/xbin",
-                "export HOME=$homePath",
-                "export TMPDIR=$prefixPath/tmp",
-                "export LANG=en_US.UTF-8",
-                "export LC_ALL=C",
-                "export PYTHONPATH=$prefixPath/lib/python3/site-packages:\${PYTHONPATH:-}",
-                "",
-                "# Fuentear .bashrc si existe",
-                "if [ -f \"\$HOME/.bashrc\" ]; then",
-                "    . \"\$HOME/.bashrc\"",
-                "fi",
-                "",
-                "echo \"Bootstrap listo. Comandos: apt, python3, pip, cmus, tar, zstd, unzip, nano\"",
-                "while true; do",
-                "    printf \"\\033[1;32mTerminalMaster\\033[0m:\\033[1;34m\\w\\033[0m\\$ \"",
-                "    read cmd_input",
-                "    case \"\${cmd_input}\" in",
-                "        exit|quit) break;;",
-                "        *) eval \"\${cmd_input}\" 2>/dev/null || echo \"Comando no disponible en bootstrap\";;",
-                "    esac",
-                "done"
-            )
-            File(prefix, "bin/bash").writeText(bashLines.joinToString("\n") + "\n")
-            File(prefix, "bin/bash").setExecutable(true)
-            File(prefix, "bin/sh").writeText(bashLines.joinToString("\n") + "\n")
-            File(prefix, "bin/sh").setExecutable(true)
+            onProgress?.invoke("Configurando scripts de entorno...", 30)
+            // En Android 14+, /data/data/ se monta con noexec.
+            // NO podemos crear scripts ejecutables en $PREFIX/bin/.
+            // Los alias en .bashrc apuntan directamente a linker64+PRoot
 
-            onProgress?.invoke("Creando wrappers de paquetes en \$PREFIX/bin...", 50)
-            for (cmd in REQUIRED_PACKAGES) {
-                val wrapper = "#!/system/bin/sh\n" +
-                        "# Wrapper for $cmd - PREFIX=$prefixPath\n" +
-                        "export PREFIX=$prefixPath\n" +
-                        "export HOME=$homePath\n" +
-                        "export PATH=$prefixPath/bin:/system/bin:/system/xbin\n" +
-                        "export LANG=en_US.UTF-8\n" +
-                        "export LC_ALL=C\n" +
-                        "export PYTHONPATH=$prefixPath/lib/python3/site-packages:\${PYTHONPATH:-}\n" +
-                        "if command -v $cmd >/dev/null 2>&1; then\n" +
-                        "    exec $cmd \"\$@\"\n" +
-                        "elif [ -f \"$prefixPath/bin/$cmd\" ]; then\n" +
-                        "    exec $prefixPath/bin/$cmd \"\$@\"\n" +
-                        "else\n" +
-                        "    echo \"$cmd: command not found (wrapper)\"\n" +
-                        "    exit 127\n" +
-                        "fi\n"
-                File(prefix, "bin/$cmd").apply {
-                    writeText(wrapper)
-                    setExecutable(true)
-                }
-            }
+            val envContent = """
+# Terminal Master Hub - Environment Configuration
+# Cargado por env al inicio de la terminal
+PREFIX=$prefixPath
+HOME=$homePath
+PATH=/system/bin:/system/xbin
+TMPDIR=$prefixPath/tmp
+LANG=en_US.UTF-8
+LC_ALL=C
+""".trimIndent()
+            File(prefix, "etc/environment").writeText(envContent)
 
-            // --- Configuración de cmus ---
-            onProgress?.invoke("Configurando cmus...", 55)
-            val cmusConfigFile = File(prefix, "home/.config/cmus/autosave")
-            cmusConfigFile.writeText(
-                "# cmus autosave - Terminal Master Hub\n" +
-                "# https://github.com/MichaelARC-NI/TerminalMasterHub\n" +
-                "set status_display=yes\n" +
-                "set repeat=false\n" +
-                "set shuffle=false\n" +
-                "set softvol=true\n" +
-                "set volume_left=50\n" +
-                "set volume_right=50\n"
-            )
-            // Crear dir para playlists
-            File(prefix, "home/.cmus").mkdirs()
-
-            // --- Configuración de Python site-packages ---
-            onProgress?.invoke("Configurando entorno Python...", 56)
-            val pythonSitePackages = File(prefix, "lib/python3/site-packages")
-
-            // Crear requirements.txt con todos los paquetes Python
-            val requirementsContent = PYTHON_PACKAGES.joinToString("\n")
-            File(prefix, "etc/requirements.txt").writeText(requirementsContent + "\n")
-
-            // Intentar instalar paquetes Python con pip si está disponible
-            onProgress?.invoke("Instalando paquetes Python con pip...", 58)
-            try {
-                val pipTarget = pythonSitePackages.absolutePath
-                // Usar env con PATH para ejecutar pip directamente (evita noexec)
-                val pipEnv = "env PATH=$prefixPath/bin:/system/bin:/system/xbin PREFIX=$prefixPath HOME=$homePath PYTHONPATH=$pipTarget"
-                val pipCmd = "$pipEnv pip3 install --target=\"$pipTarget\" -r \"$prefixPath/etc/requirements.txt\" 2>&1 || " +
-                        "$pipEnv python3 -m pip install --target=\"$pipTarget\" -r \"$prefixPath/etc/requirements.txt\" 2>&1 || " +
-                        "echo '[pip] No disponible - instala Python3 con apt update && apt install python3 python3-pip'"
-                val pb = ProcessBuilder("sh", "-c", pipCmd)
-                pb.environment().putAll(mapOf(
-                    "PREFIX" to prefixPath,
-                    "HOME" to homePath,
-                    "PATH" to "$prefixPath/bin:/system/bin:/system/xbin",
-                    "TMPDIR" to "$prefixPath/tmp",
-                    "PYTHONPATH" to pipTarget
-                ))
-                pb.redirectErrorStream(true)
-                val pipProcess = pb.start()
-                val pipOutput = pipProcess.inputStream.bufferedReader().readText()
-                pipProcess.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)
-            } catch (e: Exception) {
-                // Ignorar errores de pip - los paquetes Python son opcionales
-            }
-
-            // Contar módulos instalados
-            val pyCount = if (pythonSitePackages.exists()) {
-                pythonSitePackages.listFiles()?.count {
-                    it.isDirectory || it.name.endsWith(".dist-info")
-                } ?: 0
-            } else 0
-
-            onProgress?.invoke("Configurando variables de entorno y locales...", 70)
-            // Variables de entorno completa
-            val envContent = listOf(
-                "export PREFIX=$prefixPath",
-                "export HOME=$homePath",
-                "export PATH=$prefixPath/bin:/system/bin:/system/xbin",
-                "export TMPDIR=$prefixPath/tmp",
-                "export LANG=en_US.UTF-8",
-                "export LC_ALL=C",
-                "export PYTHONPATH=$prefixPath/lib/python3/site-packages",
-                "export CMUS_HOME=$homePath/.config/cmus"
-            ).joinToString("\n") + "\n"
-
-            // .bashrc completo con PS1, alias, cmus, python, pip
-            onProgress?.invoke("Generando .bashrc...", 75)
+            onProgress?.invoke("Creando .bashrc...", 50)
             val bashrcContent = """
 # ============================================================================
-# Terminal Master Hub .bashrc
-# Version: 1.3.4
+# Terminal Master Hub - .bashrc v1.4.1
 # ============================================================================
 
-# Prompt profesional con colores
-PS1='\[\033[1;32m\]TerminalMaster\[\033[0m\]:\[\033[1;34m\]\w\[\033[0m\]\$ '
-
-# ============================================================================
-# ALIASES
-# ============================================================================
-alias ll='ls -la --color=auto'
-alias la='ls -A --color=auto'
-alias l='ls -CF --color=auto'
+# Alias basicos
+alias ll='ls -la'
+alias la='ls -A'
+alias l='ls -CF'
 alias ..='cd ..'
 alias ...='cd ../..'
-alias cls='clear'
-alias py='python3 -i'
-alias py3='python3'
-alias pip='pip3 2>/dev/null || python3 -m pip 2>/dev/null || echo "pip no disponible"'
-alias pip3='pip3 2>/dev/null || python3 -m pip 2>/dev/null || echo "pip3 no disponible"'
-alias cmus='if command -v cmus >/dev/null 2>&1; then cmus 2>/dev/null; else echo "cmus no instalado - usa: apt update && apt install cmus"; fi'
-alias music='cmus'
-alias python-packages='pip3 list --format=columns 2>/dev/null || echo "pip no disponible"'
-alias py-install='pip3 install --user'
-alias py-list='pip3 list --format=columns'
-alias py-freeze='pip3 freeze'
 
-# ============================================================================
-# VARIABLES DE ENTORNO
-# ============================================================================
-export LANG=en_US.UTF-8
-export LC_ALL=C
-export HOME=$homePath
-export PREFIX=$prefixPath
-export PATH=$prefixPath/bin:/system/bin:/system/xbin
-export TMPDIR=$prefixPath/tmp
-export PYTHONPATH=$prefixPath/lib/python3/site-packages:${'$'}{PYTHONPATH:-}
-export CMUS_HOME=${'$'}HOME/.config/cmus
+# Prompt profesional
+PS1='\033[1;32mTerminalMaster\033[0m:\033[1;34m\w\033[0m$ '
 
-# ============================================================================
-# PYTHON SETUP — Symlink + site-packages check
-# ============================================================================
+# Configuracion de PATH del sistema
+export PATH=/system/bin:/system/xbin
 
-# Crear symlink python -> python3 si no existe
-if command -v python3 >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; then
-    if [ -f ${prefixPath}/bin/python3 ] && [ ! -f ${prefixPath}/bin/python ]; then
-        ln -sf ${prefixPath}/bin/python3 ${prefixPath}/bin/python 2>/dev/null
-        hash -r 2>/dev/null
-    fi
-fi
-
-# Contar módulos Python instalados en site-packages
-if [ -d "${prefixPath}/lib/python3/site-packages" ]; then
-    PKG_COUNT=${'$'}(ls -d "${prefixPath}/lib/python3/site-packages/"*/ 2>/dev/null | wc -l)
-    if [ "${'$'}PKG_COUNT" -gt 0 ]; then
-        echo "  Python: ${'$'}PKG_COUNT paquetes instalados en site-packages"
-    fi
-fi
-
-# Verificar si pip está disponible
-if command -v pip3 >/dev/null 2>&1; then
-    echo "  pip3 listo — usa 'pip install <paquete>' para instalar mas"
+# Python startup
+export PYTHONSTARTUP=\$HOME/.pythonrc
+if [ ! -f \$HOME/.pythonrc ]; then
+    cat > \$HOME/.pythonrc << 'PYEOF'
+# Terminal Master Hub Python config
+import sys
+print(f"Python {sys.version.split()[0]} - Terminal Master Hub")
+PYEOF
 fi
 
 # ============================================================================
-# CMUS SETUP
+# ALIAS PARA UBUNTU VIA PROOT+linker64
 # ============================================================================
-if command -v cmus >/dev/null 2>&1; then
-    echo "  cmus disponible — usa 'music' o 'cmus' para el reproductor"
+# En Android 14+, /data/data/ tiene noexec.
+# Ejecutamos binarios de Ubuntu via /system/bin/linker64 + PRoot
+# para evitar la restriccion.
+# ============================================================================
+PROOT_DIR="\$PREFIX/proot"
+PROOT_BIN="\$PROOT_DIR/proot-arm64"
+UBUNTU_DIR="\$PROOT_DIR/ubuntu"
+LINKER64="/system/bin/linker64"
+
+if [ -f "\$PROOT_BIN" ] && [ -d "\$UBUNTU_DIR/usr/bin" ]; then
+    PROOT_CMD="\$LINKER64 \$PROOT_BIN -r \$UBUNTU_DIR -b /system -b /dev -b /proc -b /sys -b /data -b /storage -b /dev/pts"
+    
+    alias python3='\$PROOT_CMD -w /root /usr/bin/python3'
+    alias python=python3
+    alias pip3='\$PROOT_CMD -w /root /usr/bin/pip3'
+    alias pip=pip3
+    alias apt='\$PROOT_CMD -w /root /usr/bin/apt'
+    alias apt-get='\$PROOT_CMD -w /root /usr/bin/apt-get'
+    alias cmus='\$PROOT_CMD -w /root /usr/bin/cmus'
+    alias bash='\$PROOT_CMD -w /root /bin/bash --login'
+    alias tar='\$PROOT_CMD -w /root /usr/bin/tar'
+    alias zstd='\$PROOT_CMD -w /root /usr/bin/zstd'
+    alias 7z='\$PROOT_CMD -w /root /usr/bin/7z'
+    alias unzip='\$PROOT_CMD -w /root /usr/bin/unzip'
+    alias unrar='\$PROOT_CMD -w /root /usr/bin/unrar'
+    alias nano='\$PROOT_CMD -w /root /usr/bin/nano'
+    alias nvim='\$PROOT_CMD -w /root /usr/bin/nvim'
+    
+    echo ""
+    echo "  Ubuntu 24.04 ARM64 listo via PRoot+linker64"
+    echo "  Comandos: python3, apt, cmus, tar, nano, etc."
 else
-    echo "  cmus no disponible — instalalo con: apt update && apt install cmus"
+    echo ""
+    echo "  PRoot/Ubuntu no instalado. Usa: bootstrap proot install"
 fi
 
 # ============================================================================
-# PYTHON AUTO-INSTALL
-# ============================================================================
-if ! command -v python3 >/dev/null 2>&1; then
-    echo "  Python no encontrado. Intentando instalar..."
-    apt update 2>/dev/null && apt install python3 python3-pip -y 2>/dev/null || true
-fi
-
-# ============================================================================
-# APT CHECK
-# ============================================================================
-if ! command -v apt >/dev/null 2>&1; then
-    echo "  Nota: apt no disponible. Instala Termux para acceso completo."
-fi
-
-# ============================================================================
-# BIENVENIDA
+# BIENVENIDA (sin bordes ASCII)
 # ============================================================================
 echo ""
-echo "  Terminal Master Hub v1.3.5 — by Michael Antonio Rodriguez Condega"
+echo "  Terminal Master Hub v1.4.1 — by Michael Antonio Rodriguez Condega"
 echo "  GitHub: MichaelARC-NI | Telegram: t.me/Michael_Antonio_Rodriguez"
+echo "  Email: androidmovil@proton.me | FB: facebook.com/share/1D1pfVdbXE"
 echo "  Escribe 'help' para comandos disponibles"
 echo ""
 """.trimIndent()
 
             File(prefix, "home/.bashrc").writeText(bashrcContent + "\n")
-            File(prefix, "etc/environment").writeText(envContent)
 
-            onProgress?.invoke("Verificando...", 90)
-            val installed = REQUIRED_PACKAGES.filter { pkg ->
-                File(prefixPath, "bin/$pkg").exists()
-            }
-
-            // Archivo de configuracion de entorno (no ejecutable, cargado por env)
+            // Archivo de configuracion de entorno (no ejecutable)
             val initContent = """# Terminal Master Hub - Init configuration
 # Cargado automaticamente, no requiere permisos de ejecucion
 PREFIX=$prefixPath
 HOME=$homePath
-PATH=$prefixPath/bin:/system/bin:/system/xbin
+PATH=/system/bin:/system/xbin
 TMPDIR=$prefixPath/tmp
-PYTHONPATH=$prefixPath/lib/python3/site-packages
 LANG=en_US.UTF-8
 LC_ALL=C
 """
             File(prefix, "etc/environment.conf").writeText(initContent)
 
+            onProgress?.invoke("Verificando...", 90)
+
+            val ubuntuInstalled = try {
+                val pm = ProotManager(context)
+                pm.isUbuntuInstalled()
+            } catch (e: Exception) { false }
+
             onProgress?.invoke("Completado!", 100)
             BootstrapStatus(
                 isInstalled = true,
                 prefixPath = prefixPath,
-                packages = installed,
-                pythonPackagesInstalled = pyCount,
+                packages = if (ubuntuInstalled) REQUIRED_PACKAGES else emptyList(),
+                pythonPackagesInstalled = 0,
                 totalSize = getDirSize(prefix),
-                message = "PREFIX=$prefixPath ${installed.size}/${REQUIRED_PACKAGES.size} paquetes | Python: ${pyCount} modulos"
+                message = "Entorno listo. Usa 'bootstrap proot install' para activar Ubuntu."
             )
         } catch (e: Exception) {
             BootstrapStatus(message = "Error: ${e.message}")
         }
     }
 
-    /** Genera script init.sh que exporta todas las variables y lanza bash */
-    fun getInitScript(): String {
+    /**
+     * Archivo de configuracion de entorno (usado por env desde la terminal).
+     */
+    fun getInitConfig(): String = buildString {
         val p = getPrefixDir().absolutePath
         val h = "$p/$HOME_DIR"
-        val py = "$p/lib/python3/site-packages"
-        return """#!/system/bin/sh
-# Terminal Master Hub - Init script v1.3.5
-export PREFIX=$p
-export HOME=$h
-export PATH=$p/bin:/system/bin:/system/xbin
-export TMPDIR=$p/tmp
-export PYTHONPATH=$py:${'$'}PYTHONPATH
-export LANG=en_US.UTF-8
-export LC_ALL=C
-cd ${'$'}HOME
-if [ -f "${'$'}HOME/.bashrc" ]; then
-    . "${'$'}HOME/.bashrc"
-fi
-exec ${'$'}PREFIX/bin/bash
-"""
+        appendLine("# Terminal Master Hub - Init config v1.4.1")
+        appendLine("PREFIX=$p")
+        appendLine("HOME=$h")
+        appendLine("PATH=/system/bin:/system/xbin")
+        appendLine("TMPDIR=$p/tmp")
+        appendLine("LANG=en_US.UTF-8")
+        appendLine("LC_ALL=C")
+        appendLine("")
+        appendLine("# Usa 'mode ubuntu' para activar PRoot/Ubuntu")
     }
 
-    /** Ejecuta un comando dentro del entorno PREFIX con todas las variables */
+    /**
+     * Ejecuta un comando dentro del entorno PREFIX.
+     * Si useProot=true y PRoot+Ubuntu estan disponibles, usa PRoot.
+     * Si no, usa comandos del sistema via env.
+     */
     suspend fun executeInBootstrap(command: String, useProot: Boolean = false): String = withContext(Dispatchers.IO) {
         val p = getPrefixDir().absolutePath
         val h = "$p/$HOME_DIR"
-        val py = "$p/lib/python3/site-packages"
 
         // Intentar usar PRoot/Ubuntu si esta disponible y se solicita
         if (useProot) {
@@ -407,22 +293,17 @@ exec ${'$'}PREFIX/bin/bash
             } catch (_: Exception) {}
         }
 
-        val env = mapOf(
-            "PREFIX" to p,
-            "HOME" to h,
-            "PATH" to "$p/bin:/system/bin:/system/xbin",
-            "TMPDIR" to "$p/tmp",
-            "LANG" to "en_US.UTF-8",
-            "LC_ALL" to "C",
-            "PYTHONPATH" to py
-        )
         try {
             // En Android 14+, noexec impide ejecutar archivos en /data/data/.
-            // Usamos 'env' con PATH completo para ejecutar comandos del sistema.
-            val envPrefix = "env PREFIX=$p HOME=$h PATH=$p/bin:/system/bin:/system/xbin LANG=en_US.UTF-8 LC_ALL=C PYTHONPATH=$py"
+            // Usamos env con PATH del sistema para comandos basicos.
+            val envPrefix = "env PREFIX=$p HOME=$h PATH=/system/bin:/system/xbin LANG=en_US.UTF-8 LC_ALL=C"
             val resolvedCmd = "$envPrefix $command"
             val pb = ProcessBuilder("sh", "-c", resolvedCmd)
-            pb.environment().putAll(env)
+            pb.environment()["PREFIX"] = p
+            pb.environment()["HOME"] = h
+            pb.environment()["PATH"] = "/system/bin:/system/xbin"
+            pb.environment()["LANG"] = "en_US.UTF-8"
+            pb.environment()["LC_ALL"] = "C"
             pb.directory(File(h))
             pb.redirectErrorStream(true)
             val proc = pb.start()
@@ -430,8 +311,26 @@ exec ${'$'}PREFIX/bin/bash
         } catch (e: Exception) { "Error: ${e.message}" }
     }
 
+    /**
+     * Ejecuta un comando usando linker64 para evitar restriccion noexec.
+     */
+    suspend fun executeWithLinker64(binaryPath: String, args: String = ""): String = withContext(Dispatchers.IO) {
+        try {
+            val file = File(binaryPath)
+            if (!file.exists()) return@withContext "Binario no encontrado: $binaryPath"
+            val linker64 = "/system/bin/linker64"
+            if (!File(linker64).exists()) return@withContext "linker64 no disponible en este dispositivo"
+            val cmd = "$linker64 $binaryPath $args"
+            val pb = ProcessBuilder("sh", "-c", cmd)
+            pb.redirectErrorStream(true)
+            val proc = pb.start()
+            proc.inputStream.bufferedReader().readText().trim()
+        } catch (e: Exception) { "Error: ${e.message}" }
+    }
 
-    fun uninstall(): Boolean = getPrefixDir().let { if (it.exists()) it.deleteRecursively() else true }
+    fun uninstall(): Boolean = getPrefixDir().let {
+        if (it.exists()) it.deleteRecursively() else true
+    }
 
     private fun getDirSize(dir: File): Long {
         var size = 0L

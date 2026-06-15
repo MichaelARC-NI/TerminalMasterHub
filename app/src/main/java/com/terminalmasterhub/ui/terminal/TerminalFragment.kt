@@ -111,7 +111,7 @@ class TerminalFragment : Fragment() {
         val bootstrapBadge = if (bootstrapManager.isInstalled()) " [LINUX]" else ""
 
         val welcome = """
-Terminal Master Hub v1.4.0
+Terminal Master Hub v1.4.1
 Terminal Linux + Python IDE + Root Tools
 by $DEV_NAME
 
@@ -221,7 +221,7 @@ Comandos:
         val about = """
 $DEV_NAME
 
-Terminal Master Hub v1.4.0
+Terminal Master Hub v1.4.1
 
 App Android todo-en-uno:
 ✓ Terminal Linux (sin root)
@@ -571,35 +571,30 @@ App Android todo-en-uno:
 
     private suspend fun runShell(cmd: String) {
         try {
-            // Si estamos en modo PRoot/Ubuntu, ejecutar dentro del entorno Ubuntu
-            if (useProotMode && prootManager.isProotAvailable() && prootManager.isUbuntuInstalled()) {
+            // PRoot/Ubuntu mode: ejecutar dentro del entorno Ubuntu via linker64
+            if ((useProotMode || cmd.startsWith("apt") || cmd.startsWith("python3") || cmd.startsWith("pip") || cmd.startsWith("cmus")) && prootManager.isProotAvailable() && prootManager.isUbuntuInstalled()) {
                 val result = prootManager.executeInProot(cmd)
                 if (result.isNotEmpty()) appendOutput(result)
                 appendOutput("")
                 return
             }
 
-            // Inyectar entorno PREFIX con HOME, PATH y locale
             val prefixPath = bootstrapManager.getPrefixDir().absolutePath
             val homePath = "$prefixPath/${BootstrapManager.HOME_DIR}"
 
-            // En Android 14+, los archivos en /data/data/ no son ejecutables (noexec).
-            // No usamos wrapper scripts. En su lugar, usamos 'env' con las variables
-            // de entorno para ejecutar los comandos del sistema directamente.
-            val envPrefix = "env PREFIX=$prefixPath HOME=$homePath PATH=$prefixPath/bin:/system/bin:/system/xbin LANG=en_US.UTF-8 LC_ALL=C PYTHONPATH=$prefixPath/lib/python3/site-packages"
+            // En Android 14+, /data/data/ tiene noexec.
+            // NO incluimos $PREFIX/bin/ en PATH porque los binarios ahi no son ejecutables.
+            // Solo usamos PATH del sistema para comandos basicos (ls, pwd, echo, etc.)
+            // Para comandos avanzados (python3, apt, cmus) se requiere PRoot mode.
+            val envPrefix = "env PREFIX=$prefixPath HOME=$homePath PATH=/system/bin:/system/xbin LANG=en_US.UTF-8 LC_ALL=C"
             val resolvedCmd = "$envPrefix $cmd"
 
-            val envMap = mapOf(
-                "PREFIX" to prefixPath,
-                "HOME" to homePath,
-                "PATH" to "$prefixPath/bin:/system/bin:/system/xbin",
-                "TMPDIR" to "$prefixPath/tmp",
-                "LANG" to "en_US.UTF-8",
-                "LC_ALL" to "C",
-                "PYTHONPATH" to "$prefixPath/lib/python3/site-packages"
-            )
             val pb = ProcessBuilder("sh", "-c", resolvedCmd)
-            pb.environment().putAll(envMap)
+            pb.environment()["PREFIX"] = prefixPath
+            pb.environment()["HOME"] = homePath
+            pb.environment()["PATH"] = "/system/bin:/system/xbin"
+            pb.environment()["LANG"] = "en_US.UTF-8"
+            pb.environment()["LC_ALL"] = "C"
             pb.directory(File(FileManager.getStoragePath()))
             pb.redirectErrorStream(true)
             val process = pb.start()

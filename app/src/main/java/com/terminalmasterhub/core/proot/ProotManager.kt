@@ -1,28 +1,24 @@
 package com.terminalmasterhub.core.proot
 
 import android.content.Context
-import android.content.res.AssetManager
 import com.terminalmasterhub.core.root.BootstrapManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.FileOutputStream
-import java.io.InputStream
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
+import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Gestor de PRoot + Ubuntu ARM64 para Terminal Master Hub v1.4.0.
+ * Gestor de PRoot + Ubuntu ARM64 para Terminal Master Hub v1.4.1.
  *
  * Proporciona un entorno Linux completo (Ubuntu 24.04 ARM64)
  * usando PRoot para evitar necesidad de root.
  *
  * El Ubuntu rootfs y PRoot vienen EMBEBIDOS en los assets del APK,
  * NO requieren descarga externa. Extraccion automatica en primer uso.
- *
- * Basado en Termux y Kali NetHunter:
- * - PRoot: redirige llamadas al sistema para crear un chroot falso
- * - Rootfs Ubuntu ARM64: sistema de archivos completo con apt, python, cmus
  *
  * Los binarios se almacenan en:
  *   $PREFIX/proot/proot-arm64    <- Binario de PRoot (desde assets)
@@ -38,12 +34,10 @@ class ProotManager(private val context: Context) {
         const val PROOT_ASSET = "ubuntu/proot-arm64"
 
         // URLs de descarga por si los assets no estan disponibles
-        // GitHub Release - fuente principal de descarga
         const val GITHUB_RELEASE = "https://github.com/MichaelARC-NI/TerminalMasterHub/releases/download/v1.4.0"
         const val GITHUB_ROOTFS_URL = "$GITHUB_RELEASE/ubuntu-base-24.04.4-base-arm64.tar.gz"
         const val GITHUB_PROOT_URL = "$GITHUB_RELEASE/proot-arm64"
 
-        // Fuentes secundarias (fallback si GitHub no funciona)
         const val PROOT_DEB_URL = "https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.78-1_aarch64.deb"
         const val UBUNTU_ROOTFS_URL = "http://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz"
     }
@@ -58,22 +52,15 @@ class ProotManager(private val context: Context) {
 
     var onProgress: ((String, Int) -> Unit)? = null
 
-    /** Obtiene el directorio base de proot dentro de PREFIX */
     fun getProotBaseDir(): File = File(
         context.filesDir,
         "${BootstrapManager.PREFIX_DIR}/$PROOT_SUBDIR"
     )
 
-    /** Obtiene el binario de PRoot */
     fun getProotBinary(): File = File(getProotBaseDir(), PROOT_BIN_NAME)
-
-    /** Obtiene el directorio de la rootfs Ubuntu */
     fun getUbuntuDir(): File = File(getProotBaseDir(), UBUNTU_SUBDIR)
 
-    /** Verifica si PRoot esta disponible */
     fun isProotAvailable(): Boolean = getProotBinary().exists()
-
-    /** Verifica si Ubuntu rootfs esta instalada */
     fun isUbuntuInstalled(): Boolean {
         val ubuntuDir = getUbuntuDir()
         return ubuntuDir.exists() &&
@@ -81,7 +68,6 @@ class ProotManager(private val context: Context) {
                 File(ubuntuDir, "usr/bin/apt").exists()
     }
 
-    /** Obtiene el estado completo */
     fun getStatus(): ProotStatus {
         val assetsExist = try {
             context.assets.open(UBUNTU_ROOTFS_ASSET).use { true }
@@ -112,13 +98,10 @@ class ProotManager(private val context: Context) {
 
     /**
      * Instala PRoot + Ubuntu ARM64.
-     * Primero intenta extraer desde los assets del APK.
-     * Si los assets no existen, descarga desde internet.
      */
     suspend fun installAll(): Boolean = withContext(Dispatchers.IO) {
         val prootOk = installProot()
         if (!prootOk) return@withContext false
-
         val ubuntuOk = installUbuntuRootfs()
         ubuntuOk
     }
@@ -133,52 +116,47 @@ class ProotManager(private val context: Context) {
             prootDir.mkdirs()
             val prootBin = getProotBinary()
 
-            // Intentar 1: Extraer desde assets (embebido en APK)
-            if (!prootBin.exists()) {
-                onProgress?.invoke("Buscando PRoot en assets...", 10)
-                try {
-                    context.assets.open(PROOT_ASSET).use { input ->
-                        prootBin.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                    onProgress?.invoke("PRoot extraido de assets!", 30)
-                } catch (e: Exception) {
-                    onProgress?.invoke("Assets no disponibles.", 15)
-                    
-                    // Intentar 2: Buscar en almacenamiento externo (manual)
-                    try {
-                        val manualFile = File(context.getExternalFilesDir(null), "proot-arm64")
-                        if (manualFile.exists()) {
-                            manualFile.copyTo(prootBin, overwrite = true)
-                            onProgress?.invoke("PRoot desde almacenamiento externo!", 30)
-                        } else {
-                            throw Exception("No manual file")
-                        }
-                    } catch (e2: Exception) {
-                        // Intentar 3: Descargar desde multiples fuentes
-                        onProgress?.invoke("Descargando PRoot desde internet...", 20)
-                        if (downloadProotWithFallback(prootDir)) {
-                            onProgress?.invoke("PRoot descargado!", 30)
-                        } else {
-                            onProgress?.invoke("No se pudo obtener PRoot", 40)
-                            return@withContext false
-                        }
+            // Intentar 1: Extraer desde assets
+            try {
+                context.assets.open(PROOT_ASSET).use { input ->
+                    prootBin.outputStream().use { output ->
+                        input.copyTo(output)
                     }
                 }
+                if (prootBin.exists() && prootBin.length() > 10000) {
+                    onProgress?.invoke("PRoot extraido de assets!", 30)
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                onProgress?.invoke("Assets de PRoot no disponibles.", 20)
             }
 
-            // Verificar que existe
-            if (!prootBin.exists()) {
-                onProgress?.invoke("Error: PRoot binario no encontrado", 40)
-                return@withContext false
+            // Intentar 2: Descargar desde GitHub
+            try {
+                onProgress?.invoke("Descargando PRoot desde GitHub...", 20)
+                downloadFile(GITHUB_PROOT_URL, prootBin)
+                if (prootBin.exists() && prootBin.length() > 10000) {
+                    onProgress?.invoke("PRoot descargado de GitHub!", 30)
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                onProgress?.invoke("GitHub no disponible: ${e.message}", 22)
             }
 
-            // Crear script wrapper que use linker64 para evitar noexec
-            createProotWrapper(prootBin)
+            // Intentar 3: Descargar desde .deb de Termux
+            try {
+                onProgress?.invoke("Descargando PRoot desde Termux...", 24)
+                downloadAndExtractProot(prootDir)
+                if (getProotBinary().exists()) {
+                    onProgress?.invoke("PRoot instalado desde Termux!", 30)
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                onProgress?.invoke("Termux fallo: ${e.message}", 26)
+            }
 
-            onProgress?.invoke("PRoot instalado correctamente!", 50)
-            true
+            onProgress?.invoke("Error: No se pudo obtener PRoot", 40)
+            false
         } catch (e: Exception) {
             onProgress?.invoke("Error instalando PRoot: ${e.message}", 50)
             false
@@ -188,6 +166,7 @@ class ProotManager(private val context: Context) {
     /**
      * Instala la rootfs de Ubuntu ARM64.
      * Extrae desde assets primero, descarga como fallback.
+     * Usa Apache Commons Compress para extraccion (no necesita tar del sistema).
      */
     suspend fun installUbuntuRootfs(): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -195,55 +174,67 @@ class ProotManager(private val context: Context) {
             if (ubuntuDir.exists()) ubuntuDir.deleteRecursively()
             ubuntuDir.mkdirs()
 
-            // Intentar 1: Extraer desde assets
             var extracted = false
+
+            // Intentar 1: Extraer desde assets del APK
             onProgress?.invoke("Buscando Ubuntu rootfs en assets...", 40)
             try {
                 context.assets.open(UBUNTU_ROOTFS_ASSET).use { input ->
-                    extractTarGz(input, ubuntuDir)
+                    extractTarGzWithCommons(input, ubuntuDir)
                 }
                 extracted = true
                 onProgress?.invoke("Ubuntu rootfs extraida de assets!", 60)
             } catch (e: Exception) {
-                onProgress?.invoke("Assets no disponibles.", 45)
+                onProgress?.invoke("Assets no disponibles: ${e.message}", 45)
             }
 
             // Intentar 2: Buscar archivo manual en almacenamiento externo
             if (!extracted) {
                 onProgress?.invoke("Buscando rootfs en almacenamiento...", 45)
                 try {
-                    // Buscar en /sdcard/ o almacenamiento externo
                     val storageDirs = listOf(
                         File("/storage/emulated/0/ubuntu-rootfs.tar.gz"),
                         File("/storage/emulated/0/Download/ubuntu-rootfs.tar.gz"),
+                        File("/storage/emulated/0/ubuntu_rootfs"),
                         File(context.getExternalFilesDir(null), "ubuntu-rootfs.tar.gz"),
-                        File(context.getExternalCacheDir(), "ubuntu-rootfs.tar.gz")
                     )
                     for (f in storageDirs) {
-                        if (f.exists()) {
+                        if (f.exists() && f.length() > 1000000) {
                             onProgress?.invoke("Rootfs encontrada en: ${f.absolutePath}", 50)
                             f.inputStream().use { input ->
-                                extractTarGz(input, ubuntuDir)
+                                extractTarGzWithCommons(input, ubuntuDir)
                             }
                             extracted = true
                             onProgress?.invoke("Ubuntu rootfs extraida de almacenamiento!", 60)
-                            f.delete()
                             break
                         }
                     }
                 } catch (_: Exception) {}
             }
 
-            // Intentar 3: Descargar desde internet con multiples mirrors
+            // Intentar 3: Descargar desde internet
             if (!extracted) {
                 onProgress?.invoke("Descargando Ubuntu 24.04 ARM64 desde internet...", 50)
-                if (downloadUbuntuWithFallback(ubuntuDir)) {
-                    extracted = true
-                    onProgress?.invoke("Ubuntu descargado e instalado!", 65)
-                } else {
-                    onProgress?.invoke("No se pudo obtener Ubuntu rootfs", 80)
-                    return@withContext false
+                val tarFile = File(getProotBaseDir(), "ubuntu-rootfs.tar.gz")
+                try {
+                    downloadFile(UBUNTU_ROOTFS_URL, tarFile)
+                    if (tarFile.exists() && tarFile.length() > 1000000) {
+                        tarFile.inputStream().use { input ->
+                            extractTarGzWithCommons(input, ubuntuDir)
+                        }
+                        extracted = true
+                        onProgress?.invoke("Ubuntu descargado e instalado!", 65)
+                    }
+                } catch (e: Exception) {
+                    onProgress?.invoke("Descarga fallo: ${e.message}", 55)
+                } finally {
+                    tarFile.delete()
                 }
+            }
+
+            if (!extracted) {
+                onProgress?.invoke("No se pudo obtener Ubuntu rootfs", 80)
+                return@withContext false
             }
 
             // Verificar extraccion
@@ -278,23 +269,56 @@ class ProotManager(private val context: Context) {
     }
 
     // =========================================================================
-    // CONFIGURACION DE UBUNTU
+    // EXTRACCION TAR.GZ USANDO APACHE COMMONS COMPRESS
     // =========================================================================
 
+    /**
+     * Extrae un archivo tar.gz usando Apache Commons Compress.
+     * No necesita tar del sistema (noexec safe).
+     */
+    private fun extractTarGzWithCommons(input: InputStream, targetDir: File) {
+        // Guardar a archivo temporal para preservar el stream
+        val tmpFile = File(targetDir.parentFile, "temp_ubuntu_rootfs.tar.gz")
+        try {
+            tmpFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+            // Extraer usando Commons Compress (no necesita tar del sistema)
+            FileInputStream(tmpFile).use { fis ->
+                BufferedInputStream(fis).use { bis ->
+                    GzipCompressorInputStream(bis).use { gzis ->
+                        TarArchiveInputStream(gzis).use { taris ->
+                            var entry: TarArchiveEntry? = taris.nextTarEntry
+                            while (entry != null) {
+                                val outputFile = File(targetDir, entry.name)
+                                if (entry.isDirectory) {
+                                    outputFile.mkdirs()
+                                } else {
+                                    outputFile.parentFile?.mkdirs()
+                                    FileOutputStream(outputFile).use { fos ->
+                                        taris.transferTo(fos)
+                                    }
+                                }
+                                entry = taris.nextTarEntry
+                            }
+                        }
+                    }
+                }
+            }
+        } finally {
+            tmpFile.delete()
+        }
+    }
+
     private fun configureUbuntu(ubuntuDir: File) {
-        // resolv.conf para apt
         File(ubuntuDir, "etc/resolv.conf").writeText(
             "nameserver 8.8.8.8\nnameserver 1.1.1.1\n"
         )
-
-        // sources.list de Ubuntu 24.04 ARM64
         File(ubuntuDir, "etc/apt/sources.list").writeText(
             "deb http://ports.ubuntu.com/ubuntu-ports noble main restricted universe multiverse\n" +
             "deb http://ports.ubuntu.com/ubuntu-ports noble-updates main restricted universe multiverse\n" +
             "deb http://ports.ubuntu.com/ubuntu-ports noble-security main restricted universe multiverse\n"
         )
-
-        // locales
         File(ubuntuDir, "etc/locale.gen").writeText("en_US.UTF-8 UTF-8\n")
     }
 
@@ -310,7 +334,7 @@ class ProotManager(private val context: Context) {
     }
 
     // =========================================================================
-    // EJECUCION EN ENTORNO PROOT
+    // EJECUCION VIA PROOT + linker64 (noexec safe)
     // =========================================================================
 
     /**
@@ -327,10 +351,8 @@ class ProotManager(private val context: Context) {
                 val prootBin = getProotBinary().absolutePath
                 val ubuntuDir = getUbuntuDir().absolutePath
                 val homeDir = "$ubuntuDir/root"
-
-                // En Android 14+ no podemos ejecutar binarios en /data/data/
-                // Usamos linker64 para cargar el binario
                 val linkerPath = "/system/bin/linker64"
+
                 val prootCmd = buildString {
                     append(linkerPath)
                     append(" $prootBin")
@@ -364,7 +386,6 @@ class ProotManager(private val context: Context) {
     /** Obtiene el comando proot para terminal interactiva */
     fun getProotInitCommand(): String? {
         if (!isProotAvailable() || !isUbuntuInstalled()) return null
-
         val prootBin = getProotBinary().absolutePath
         val ubuntuDir = getUbuntuDir().absolutePath
 
@@ -390,89 +411,9 @@ class ProotManager(private val context: Context) {
     }
 
     // =========================================================================
-    // EXTRACCION DE ASSETS Y DESCARGA
+    // DESCARGA Y EXTRACCION DE PRoot DESDE DEB
     // =========================================================================
 
-    /** Extrae un tar.gz desde un InputStream */
-    private fun extractTarGz(input: InputStream, targetDir: File) {
-        val tmpFile = File(targetDir.parentFile, "temp_rootfs.tar.gz")
-        try {
-            // Guardar InputStream a archivo temporal
-            tmpFile.outputStream().use { output -> input.copyTo(output) }
-
-            // Extraer con tar
-            val process = ProcessBuilder(
-                "sh", "-c",
-                "cd ${targetDir.absolutePath} && tar -xzf ${tmpFile.absolutePath} 2>&1"
-            ).redirectErrorStream(true).start()
-            process.waitFor()
-        } finally {
-            tmpFile.delete()
-        }
-    }
-
-    /** Descarga PRoot desde GitHub Release */
-    private fun downloadProotWithFallback(targetDir: File): Boolean {
-        // Fuente 1: GitHub Release (mas confiable)
-        try {
-            onProgress?.invoke("Descargando PRoot desde GitHub...", 20)
-            val prootBin = getProotBinary()
-            downloadFile(GITHUB_PROOT_URL, prootBin)
-            if (prootBin.exists() && prootBin.length() > 10000) {
-                onProgress?.invoke("PRoot descargado de GitHub!", 30)
-                return true
-            }
-        } catch (e: Exception) {
-            onProgress?.invoke("GitHub no disponible: ${e.message}", 22)
-        }
-
-        // Fuente 2: .deb de Termux
-        try {
-            onProgress?.invoke("Descargando PRoot desde Termux...", 24)
-            downloadAndExtractProot(targetDir)
-            if (getProotBinary().exists()) return true
-        } catch (e: Exception) {
-            onProgress?.invoke("Termux fallo: ${e.message}", 26)
-        }
-
-        return false
-    }
-
-    /** Descarga Ubuntu rootfs desde GitHub Release */
-    private fun downloadUbuntuWithFallback(targetDir: File): Boolean {
-        val tarFile = File(getProotBaseDir(), "ubuntu-rootfs.tar.gz")
-        
-        // Intentar descarga desde el release de GitHub
-        val urls = listOf(
-            GITHUB_ROOTFS_URL,                          // 1. GitHub Release (principal)
-            UBUNTU_ROOTFS_URL,                           // 2. Ubuntu CD image
-            "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz" // 3. Version anterior
-        )
-        
-        for (url in urls) {
-            try {
-                val source = url.substringAfter("//").substringBefore("/").substringBefore(".")
-                onProgress?.invoke("Descargando desde $source...", 50)
-                downloadFile(url, tarFile)
-                if (tarFile.exists() && tarFile.length() > 1000000) {
-                    onProgress?.invoke("Extrayendo rootfs...", 60)
-                    val process = ProcessBuilder(
-                        "sh", "-c",
-                        "cd ${targetDir.absolutePath} && tar -xzf ${tarFile.absolutePath} 2>&1"
-                    ).redirectErrorStream(true).start()
-                    process.waitFor()
-                    tarFile.delete()
-                    if (File(targetDir, "etc/os-release").exists()) return true
-                }
-            } catch (e: Exception) {
-                onProgress?.invoke("Fallo, intentando siguiente mirror...", 55)
-                tarFile.delete()
-            }
-        }
-        return false
-    }
-
-    /** Descarga y extrae proot desde .deb de Termux */
     private fun downloadAndExtractProot(targetDir: File) {
         val debFile = File(targetDir, "proot.deb")
         try {
@@ -483,8 +424,12 @@ class ProotManager(private val context: Context) {
             val process = ProcessBuilder(
                 "sh", "-c",
                 "cd ${extractDir.absolutePath} && " +
-                "dpkg-deb -x ${debFile.absolutePath} . 2>/dev/null || " +
                 "ar x ${debFile.absolutePath} 2>/dev/null; " +
+                "if [ -f data.tar.xz ]; then " +
+                "  tar -xf data.tar.xz 2>/dev/null; " +
+                "elif [ -f data.tar.gz ]; then " +
+                "  tar -xzf data.tar.gz 2>/dev/null; " +
+                "fi; " +
                 "find . -name 'proot' -type f 2>/dev/null | head -1"
             ).redirectErrorStream(true).start()
             val output = process.inputStream.bufferedReader().readText()
@@ -505,52 +450,10 @@ class ProotManager(private val context: Context) {
         }
     }
 
-    /** Descarga Ubuntu rootfs desde internet */
-    private fun downloadUbuntuRootfs(targetDir: File) {
-        val tarFile = File(getProotBaseDir(), "ubuntu-rootfs.tar.gz")
-        try {
-            downloadFile(UBUNTU_ROOTFS_URL, tarFile)
+    // =========================================================================
+    // DESCARGA DE ARCHIVOS
+    // =========================================================================
 
-            val process = ProcessBuilder(
-                "sh", "-c",
-                "cd ${targetDir.absolutePath} && tar -xzf ${tarFile.absolutePath} 2>&1"
-            ).redirectErrorStream(true).start()
-            process.waitFor()
-
-            tarFile.delete()
-        } catch (e: Exception) {
-            tarFile.delete()
-            throw e
-        }
-    }
-
-    /** Crea script wrapper que usa linker64 para evitar noexec */
-    private fun createProotWrapper(prootBin: File) {
-        val wrapperScript = File(getProotBaseDir(), "proot.sh")
-        val wrapperContent = """#!/system/bin/sh
-# PRoot wrapper - Terminal Master Hub
-# Usa linker64 para evitar restricciones noexec en /data/data/
-PROOT_BIN="${prootBin.absolutePath}"
-LINKER64="/system/bin/linker64"
-
-if [ -f "${'$'}PROOT_BIN" ]; then
-    # Ejecutar via linker64 (funciona en Android 14+ con noexec)
-    exec "${'$'}LINKER64" "${'$'}PROOT_BIN" "${'$'}@" 2>/dev/null || {
-        # Fallback: ejecucion directa (Android <14)
-        exec "${'$'}PROOT_BIN" "${'$'}@" 2>/dev/null || {
-            echo "PRoot: No se puede ejecutar en este dispositivo"
-            exit 1
-        }
-    }
-else
-    echo "PRoot binario no encontrado"
-    exit 1
-fi
-"""
-        wrapperScript.writeText(wrapperContent)
-    }
-
-    /** Descarga un archivo desde URL */
     private fun downloadFile(urlStr: String, targetFile: File) {
         val url = URL(urlStr)
         val conn = url.openConnection() as HttpURLConnection
@@ -559,7 +462,6 @@ fi
         conn.instanceFollowRedirects = true
 
         val totalSize = conn.contentLengthLong
-
         conn.inputStream.use { input ->
             FileOutputStream(targetFile).use { output ->
                 val buffer = ByteArray(8192)
@@ -577,7 +479,6 @@ fi
         }
     }
 
-    /** Verifica conexion a internet probando multiples hosts */
     fun isNetworkAvailable(): Boolean {
         val hosts = listOf(
             "https://google.com",
@@ -598,6 +499,11 @@ fi
         return false
     }
 
+    fun uninstall(): Boolean {
+        val prootDir = getProotBaseDir()
+        return if (prootDir.exists()) prootDir.deleteRecursively() else true
+    }
+
     private fun getDirSize(dir: File): Long {
         var size = 0L
         if (dir.isDirectory) {
@@ -606,10 +512,5 @@ fi
             }
         }
         return size
-    }
-
-    fun uninstall(): Boolean {
-        val prootDir = getProotBaseDir()
-        return if (prootDir.exists()) prootDir.deleteRecursively() else true
     }
 }
