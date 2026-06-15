@@ -210,7 +210,7 @@ class ProotManager(private val context: Context) {
 
             // Configuracion inicial dentro de proot
             try {
-                runInitialSetup(ubuntuDir)
+                runInitialSetup(ubuntuDir.absolutePath)
             } catch (e: Exception) {
                 onProgress?.invoke("Setup inicial: ${e.message}", 90)
             }
@@ -418,11 +418,11 @@ class ProotManager(private val context: Context) {
 PROOT_BIN="${prootBin.absolutePath}"
 LINKER64="/system/bin/linker64"
 
-if [ -f "\$PROOT_BIN" ]; then
+if [ -f "${'$'}PROOT_BIN" ]; then
     # Ejecutar via linker64 (funciona en Android 14+ con noexec)
-    exec "\$LINKER64" "\$PROOT_BIN" "\$@" 2>/dev/null || {
+    exec "${'$'}LINKER64" "${'$'}PROOT_BIN" "${'$'}@" 2>/dev/null || {
         # Fallback: ejecucion directa (Android <14)
-        exec "\$PROOT_BIN" "\$@" 2>/dev/null || {
+        exec "${'$'}PROOT_BIN" "${'$'}@" 2>/dev/null || {
             echo "PRoot: No se puede ejecutar en este dispositivo"
             exit 1
         }
