@@ -36,6 +36,8 @@ import java.io.File
  * - Información del dispositivo conectado
  */
 class FastbootFragment : Fragment() {
+    private var hasRootChecked = false
+    private var isRooted = false {
 
     private lateinit var deviceStatusText: TextView
     private lateinit var logView: TextView
@@ -85,6 +87,7 @@ class FastbootFragment : Fragment() {
         btnReboot = view.findViewById(R.id.btnFastbootReboot)
         btnFlash = view.findViewById(R.id.btnFastbootFlash)
 
+        checkRootAccess()
         setupListeners()
         setupUsbReceiver()
     }
@@ -92,6 +95,14 @@ class FastbootFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         checkConnectedDevices()
+    }
+
+    private fun checkRootAccess() {
+        lifecycleScope.launch {
+            val status = com.terminalmasterhub.core.root.RootChecker.checkRoot(requireContext())
+            isRooted = status.hasRoot
+            hasRootChecked = true
+        }
     }
 
     private fun setupListeners() {

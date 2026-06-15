@@ -11,8 +11,8 @@ android {
         applicationId = "com.terminalmasterhub"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     buildTypes {
@@ -75,9 +75,12 @@ dependencies {
     // Apache Commons Compress for TAR/TGZ
     implementation("org.apache.commons:commons-compress:1.27.1")
 
-    // WebView for Python graphics rendering
+    // WebView for Python graphics
     implementation("androidx.webkit:webkit:1.12.1")
-
-    // DocumentFile for storage access
     implementation("androidx.documentfile:documentfile:1.0.1")
+
+    // libsu - Root access library
+    implementation("com.github.topjohnwu.libsu:core:6.0.1")
+    implementation("com.github.topjohnwu.libsu:io:6.0.1")
+    implementation("com.github.topjohnwu.libsu:nio:6.0.1")
 }
