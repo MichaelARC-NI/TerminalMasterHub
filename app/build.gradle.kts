@@ -40,10 +40,10 @@ android {
     }
 
     aaptOptions {
-        // No comprimir rootfs Ubuntu dentro del APK
-        // AssetManager lee archivos sin comprimir directamente
-        // Evita errores de memoria con archivos grandes >10MB
-        noCompress += listOf("tar.gz", "gz", "tar")
+        // El rootfs se almacena como ubuntu_rootfs (sin extension)
+        // aapt no descomprime automaticamente archivos sin extension conocida
+        // El AssetManager lo lee directamente como gzip data
+        noCompress += listOf("")  // placeholder
     }
 
     packaging {

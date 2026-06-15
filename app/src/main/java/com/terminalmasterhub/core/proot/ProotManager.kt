@@ -34,7 +34,7 @@ class ProotManager(private val context: Context) {
         const val PROOT_SUBDIR = "proot"
         const val UBUNTU_SUBDIR = "ubuntu"
         const val PROOT_BIN_NAME = "proot-arm64"
-        const val UBUNTU_ROOTFS_ASSET = "ubuntu/ubuntu-rootfs.tar.gz"
+        const val UBUNTU_ROOTFS_ASSET = "ubuntu/ubuntu_rootfs"
         const val PROOT_ASSET = "ubuntu/proot-arm64"
 
         // URLs de descarga por si los assets no estan disponibles

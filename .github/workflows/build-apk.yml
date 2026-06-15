@@ -39,7 +39,7 @@ jobs:
           mkdir -p app/src/main/assets/ubuntu/
           # Intentar descargar desde el release v1.3.8 (el rootfs esta como asset)
           ROOTFS_URL="https://github.com/MichaelARC-NI/TerminalMasterHub/releases/download/v1.3.8/ubuntu-base-24.04.4-base-arm64.tar.gz"
-          ROOTFS_FILE="app/src/main/assets/ubuntu/ubuntu-rootfs.tar.gz"
+          ROOTFS_FILE="app/src/main/assets/ubuntu/ubuntu_rootfs"
           curl -fSL -o "$ROOTFS_FILE" "$ROOTFS_URL" 2>&1 || {
             echo "Fallback: copiando rootfs placeholder..."
             # Crear un placeholder - el build fallara si no hay rootfs
