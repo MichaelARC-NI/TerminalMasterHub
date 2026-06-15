@@ -32,9 +32,13 @@ class ProotManager(private val context: Context) {
         const val PROOT_BIN_NAME = "proot-arm64"
         const val UBUNTU_ROOTFS_ASSET = "ubuntu/ubuntu_rootfs"
         const val PROOT_ASSET = "ubuntu/proot-arm64"
+        const val LIBTALLOC_ASSET = "ubuntu/libtalloc.so.2"
+        const val LIBANDROID_SHMEM_ASSET = "ubuntu/libandroid-shmem.so"
+        const val LIBTALLOC_NAME = "libtalloc.so.2"
+        const val LIBANDROID_SHMEM_NAME = "libandroid-shmem.so"
 
         // URLs de descarga por si los assets no estan disponibles
-        const val GITHUB_RELEASE = "https://github.com/MichaelARC-NI/TerminalMasterHub/releases/download/v1.4.0"
+        const val GITHUB_RELEASE = "https://github.com/MichaelARC-NI/TerminalMasterHub/releases/download/v1.4.1"
         const val GITHUB_ROOTFS_URL = "$GITHUB_RELEASE/ubuntu-base-24.04.4-base-arm64.tar.gz"
         const val GITHUB_PROOT_URL = "$GITHUB_RELEASE/proot-arm64"
 
@@ -115,6 +119,8 @@ class ProotManager(private val context: Context) {
             val prootDir = getProotBaseDir()
             prootDir.mkdirs()
             val prootBin = getProotBinary()
+            // Instalar librerias necesarias (libtalloc.so.2, libandroid-shmem.so)
+            installProotLibraries()
 
             // Intentar 1: Extraer desde assets
             try {
@@ -159,6 +165,49 @@ class ProotManager(private val context: Context) {
             false
         } catch (e: Exception) {
             onProgress?.invoke("Error instalando PRoot: ${e.message}", 50)
+            false
+        }
+    }
+
+    /**
+     * Instala las librerias necesarias para PRoot (libtalloc.so.2, libandroid-shmem.so).
+     */
+    private suspend fun installProotLibraries(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val prootDir = getProotBaseDir()
+            val libs = listOf(
+                LIBTALLOC_ASSET to LIBTALLOC_NAME,
+                LIBANDROID_SHMEM_ASSET to LIBANDROID_SHMEM_NAME
+            )
+            var allOk = true
+            for ((asset, name) in libs) {
+                val targetFile = File(prootDir, name)
+                try {
+                    context.assets.open(asset).use { input ->
+                        targetFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                } catch (e: Exception) {
+                    // If assets not available, try downloading
+                    try {
+                        val urlMap = mapOf(
+                            LIBTALLOC_NAME to "https://github.com/MichaelARC-NI/TerminalMasterHub/releases/download/v1.3.8/libtalloc.so.2",
+                            LIBANDROID_SHMEM_NAME to "https://github.com/MichaelARC-NI/TerminalMasterHub/releases/download/v1.3.8/libandroid-shmem.so"
+                        )
+                        urlMap[name]?.let { url ->
+                            downloadFile(url, targetFile)
+                        }
+                    } catch (e2: Exception) {
+                        allOk = false
+                    }
+                }
+                if (!targetFile.exists() || targetFile.length() == 0L) {
+                    allOk = false
+                }
+            }
+            allOk
+        } catch (e: Exception) {
             false
         }
     }
@@ -325,8 +374,14 @@ class ProotManager(private val context: Context) {
     private suspend fun runInitialSetup(ubuntuDir: String) {
         val setupCmd = buildString {
             append("apt-get update -qq 2>/dev/null; ")
-            append("apt-get install -y -qq python3 python3-pip cmus nano curl ca-certificates 2>/dev/null; ")
-            append("pip3 install --quiet matplotlib numpy pillow requests tqdm 2>/dev/null; ")
+            append("apt-get install -y -qq ")
+            append("python3 python3-pip python3-venv cmus nano neovim curl wget git ")
+            append("ca-certificates openssl tar gzip zstd p7zip-full unzip unrar ")
+            append("adb fastboot android-sdk-platform-tools-common ")
+            append("build-essential gcc g++ make cmake pkg-config ")
+            append("nodejs npm openjdk-17-jdk-headless 2>/dev/null; ")
+            append("pip3 install --quiet matplotlib numpy pillow requests tqdm ")
+            append("beautifulsoup4 flask scipy pandas pyyaml rich psutil 2>/dev/null; ")
             append("locale-gen en_US.UTF-8 2>/dev/null; ")
             append("echo 'Setup completado'")
         }
@@ -349,11 +404,16 @@ class ProotManager(private val context: Context) {
                 }
 
                 val prootBin = getProotBinary().absolutePath
+                val prootDir = getProotBaseDir().absolutePath
                 val ubuntuDir = getUbuntuDir().absolutePath
                 val homeDir = "$ubuntuDir/root"
                 val linkerPath = "/system/bin/linker64"
 
+                // LD_LIBRARY_PATH debe incluir el directorio de proot para libtalloc y libandroid-shmem
+                val ldLibPath = "$prootDir:/system/lib64:/vendor/lib64"
+
                 val prootCmd = buildString {
+                    append("LD_LIBRARY_PATH=$ldLibPath ")
                     append(linkerPath)
                     append(" $prootBin")
                     append(" -r $ubuntuDir")
@@ -387,10 +447,12 @@ class ProotManager(private val context: Context) {
     fun getProotInitCommand(): String? {
         if (!isProotAvailable() || !isUbuntuInstalled()) return null
         val prootBin = getProotBinary().absolutePath
+        val prootDir = getProotBaseDir().absolutePath
         val ubuntuDir = getUbuntuDir().absolutePath
+        val ldLibPath = "$prootDir:/system/lib64:/vendor/lib64"
 
         return buildString {
-            append("exec /system/bin/linker64 $prootBin")
+            append("exec env LD_LIBRARY_PATH=$ldLibPath /system/bin/linker64 $prootBin")
             append(" -r $ubuntuDir")
             append(" -b /system")
             append(" -b /dev")
