@@ -108,7 +108,7 @@ class TerminalFragment : Fragment() {
         val bootstrapBadge = if (bootstrapManager.isInstalled()) " [LINUX]" else ""
 
         val welcome = """
-Terminal Master Hub v1.2
+Terminal Master Hub v1.3
 Terminal Linux + Python IDE + Root Tools
 by $DEV_NAME
 
@@ -185,7 +185,7 @@ Comandos:
         val about = """
 $DEV_NAME
 
-Terminal Master Hub v1.2
+Terminal Master Hub v1.3
 
 App Android todo-en-uno:
 ✓ Terminal Linux (sin root)

@@ -29,13 +29,16 @@ Desarrollada por **Michael Antonio Rodriguez Condega** — *Ingeniero de Softwar
 
 #### 📱 Sub-sesión 2A — ADB Shell Interactivo
 - **Consola ADB nativa** sobre USB OTG sin dependencias externas
+- **Permisos USB automáticos**: solicita permiso al detectar dispositivo (FLAG_MUTABLE)
+- **BroadcastReceiver completo**: escucha ACTION_USB_PERMISSION y conecta auto
 - Comandos: `adb devices`, `adb shell`, `adb push`, `adb pull`
 - **Shell interactivo**: ejecuta comandos bash directamente en el dispositivo conectado
 - **Transferencia de archivos**: envía y recibe archivos entre dispositivos
-- Depuración remota y acceso a sistema de archivos del dispositivo
 
 #### ⚡ Sub-sesión 2B — Fastboot (Bootloader & Flasheo)
 - **Cliente Fastboot completo**: `devices`, `flash`, `reboot`, `oem`, `getvar`
+- **Permisos USB automáticos**: solicita permiso al detectar modo fastboot
+- **Conexión automática**: al conceder permiso, conecta y muestra info del dispositivo
 - **Botones rápidos**: devices, getvar, flash, oem unlock/lock, reboot (con opciones)
 - **Flasheo de particiones** con transferencia optimizada (chunks de 1 MB)
 - **Desbloqueo de bootloader** (`flashing unlock`, `oem unlock`)
@@ -87,14 +90,14 @@ La aplicación solicita los siguientes permisos:
 ### Descargar APK
 
 1. Ve a la sección **[Releases](https://github.com/MichaelARC-NI/TerminalMasterHub/releases)** de este repositorio
-2. Descarga el archivo `TerminalMasterHub-v1.2-debug.apk` (o la versión más reciente)
+2. Descarga el archivo `TerminalMasterHub-v1.3-debug.apk` (o la versión más reciente)
 3. Ábrelo desde el gestor de archivos
 4. Concede permiso "Instalar apps desconocidas" si lo solicita
 5. Toca **Instalar**
 
 > **Nota**: Si tu dispositivo bloquea la instalación (HyperOS, MIUI, ColorOS, OneUI), usa ADB:
 > ```bash
-> adb install TerminalMasterHub-v1.2-debug.apk
+> adb install TerminalMasterHub-v1.3-debug.apk
 > ```
 
 ### Compilar desde código fuente
