@@ -33,6 +33,21 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Download Ubuntu rootfs from latest release
+        run: |
+          echo "Downloading Ubuntu 24.04 ARM64 rootfs..."
+          mkdir -p app/src/main/assets/ubuntu/
+          # Intentar descargar desde el release v1.3.8 (el rootfs esta como asset)
+          ROOTFS_URL="https://github.com/MichaelARC-NI/TerminalMasterHub/releases/download/v1.3.8/ubuntu-base-24.04.4-base-arm64.tar.gz"
+          ROOTFS_FILE="app/src/main/assets/ubuntu/ubuntu-rootfs.tar.gz"
+          curl -fSL -o "$ROOTFS_FILE" "$ROOTFS_URL" 2>&1 || {
+            echo "Fallback: copiando rootfs placeholder..."
+            # Crear un placeholder - el build fallara si no hay rootfs
+            echo "ERROR: No se pudo descargar rootfs Ubuntu" >&2
+            exit 1
+          }
+          ls -lh "$ROOTFS_FILE"
+
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 

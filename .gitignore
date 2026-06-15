@@ -13,3 +13,4 @@
 *.dex
 app/build/
 local.properties
+app/src/main/assets/ubuntu/ubuntu-rootfs.tar.gz
