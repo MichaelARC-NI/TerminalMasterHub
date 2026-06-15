@@ -268,8 +268,8 @@ export HOME=$homePath
 export PREFIX=$prefixPath
 export PATH=$prefixPath/bin:/system/bin:/system/xbin
 export TMPDIR=$prefixPath/tmp
-export PYTHONPATH=$prefixPath/lib/python3/site-packages:\${PYTHONPATH:-}
-export CMUS_HOME=\$HOME/.config/cmus
+export PYTHONPATH=$prefixPath/lib/python3/site-packages:${'$'}{PYTHONPATH:-}
+export CMUS_HOME=${'$'}HOME/.config/cmus
 
 # ============================================================================
 # PYTHON SETUP — Symlink + site-packages check
@@ -285,9 +285,9 @@ fi
 
 # Contar módulos Python instalados en site-packages
 if [ -d "${prefixPath}/lib/python3/site-packages" ]; then
-    PKG_COUNT=\$(ls -d "${prefixPath}/lib/python3/site-packages/"*/ 2>/dev/null | wc -l)
-    if [ "\$PKG_COUNT" -gt 0 ]; then
-        echo "  Python: \$PKG_COUNT paquetes instalados en site-packages"
+    PKG_COUNT=${'$'}(ls -d "${prefixPath}/lib/python3/site-packages/"*/ 2>/dev/null | wc -l)
+    if [ "${'$'}PKG_COUNT" -gt 0 ]; then
+        echo "  Python: ${'$'}PKG_COUNT paquetes instalados en site-packages"
     fi
 fi
 
