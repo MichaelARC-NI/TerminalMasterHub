@@ -184,7 +184,7 @@ Comandos:
             .setMessage(social)
             .setPositiveButton("OK", null)
             .setNeutralButton("GitHub") { _, _ ->
-                runShell("am start -a android.intent.action.VIEW -d https://github.com/$DEV_GITHUB")
+                runShell("android.content.Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/$DEV_GITHUB")).also { startActivity(it) } android.intent.action.VIEW -d https://github.com/$DEV_GITHUB")
             }
             .show()
     }

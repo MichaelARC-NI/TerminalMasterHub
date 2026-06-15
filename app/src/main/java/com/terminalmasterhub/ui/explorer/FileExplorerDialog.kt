@@ -196,7 +196,7 @@ class FileExplorerDialog(
         override fun getItem(position: Int): FileItem? = items.getOrNull(position)
         override fun getItemId(position: Int): Long = position.toLong()
 
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+        override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup?): android.view.View {
             val item = items[position]
             val textView = (convertView as? TextView) ?: TextView(context).apply {
                 setPadding(12, 8, 12, 8)
@@ -211,7 +211,7 @@ class FileExplorerDialog(
                 else 0xFFE6EDF3.toInt()
             )
 
-            return textView
+            return textView as android.view.View
         }
 
         private fun formatSize(bytes: Long): String {
