@@ -261,3 +261,75 @@ Este proyecto es de código abierto. Todos los derechos reservados © 2026 Micha
 
 **Repositorio**: [https://github.com/MichaelARC-NI/TerminalMasterHub](https://github.com/MichaelARC-NI/TerminalMasterHub)  
 **Reportar errores**: [Abrir issue](https://github.com/MichaelARC-NI/TerminalMasterHub/issues)
+
+---
+
+## 🎵 Reproductor de Música Terminal (cmus)
+
+**Terminal Master Hub** incluye soporte integrado para **cmus** (C* Music Player), un reproductor de música ligero y potente para terminal:
+
+- **Comandos**: `music` o `cmus` para iniciar el reproductor
+- **Atajos integrados en `.bashrc`**: autocompletado y alias preconfigurados
+- **Configuración automática**: se crea el directorio `~/.config/cmus/` con ajustes predeterminados
+- **Instalación**: si cmus no está disponible en tu dispositivo, ejecuta:
+  ```bash
+  apt update && apt install cmus
+  ```
+- Ideal para reproducir archivos de audio locales mientras trabajas en la terminal
+
+## 🐍 Paquetes Python (pip) Incluidos
+
+Todos los paquetes Python populares se instalan automáticamente en `$PREFIX/lib/python3/site-packages/`:
+
+| Categoría | Paquetes |
+|-----------|----------|
+| **Visualización** | matplotlib, seaborn, plotly, pillow, imageio |
+| **Ciencia de Datos** | numpy, pandas, scipy, sympy, scikit-learn |
+| **Web & API** | flask, fastapi, uvicorn, requests, httpx, aiohttp, beautifulsoup4 |
+| **Herramientas** | tqdm, colorama, rich, psutil, click, jinja2, markdown |
+| **Base de Datos** | redis, pydantic, python-dotenv |
+| **Testing & Code Quality** | pytest, coverage, black, isort, flake8, mypy, pre-commit |
+| **Jupyter** | jupyter-client, ipykernel |
+| **Redes** | websockets, networkx |
+
+Los paquetes se instalan via `pip3` automáticamente durante la configuración del bootstrap.
+El `PYTHONPATH` se configura automáticamente para que Python encuentre estos módulos.
+
+## 🌐 Redes Sociales del Desarrollador
+
+- **GitHub**: [MichaelARC-NI](https://github.com/MichaelARC-NI)
+- **Telegram**: [t.me/Michael_Antonio_Rodriguez](https://t.me/Michael_Antonio_Rodriguez)
+- **Facebook**: [facebook.com/share/1D1pfVdbXE](https://facebook.com/share/1D1pfVdbXE)
+- **Email**: androidmovil@proton.me
+
+---
+
+## 📋 Changelog
+
+### v1.3.4 (Última)
+- ✅ Integración de **cmus** (reproductor de música en terminal)
+- ✅ **Paquetes Python (pip)**: 40+ módulos instalables automáticamente
+- ✅ `PYTHONPATH` configurado para `$PREFIX/lib/python3/site-packages/`
+- ✅ `.bashrc` mejorado con alias para cmus, pip, python-packages
+- ✅ `PythonBridge` mejorado: primero usa bootstrap Python, fallback al sistema
+- ✅ Detección mejorada de gráficos (matplotlib, PIL, seaborn, plotly, etc.)
+- ✅ Renderizado HTML mejorado para salida gráfica de Python
+
+### v1.3.3
+- ✅ Corrección de entorno Linux (HOME, locale, symlink python)
+- ✅ `.bashrc` con PS1 profesional
+- ✅ Auto-instalación de Python
+
+### v1.3.2
+- ✅ Soporte Edge-to-Edge para Android 16
+- ✅ Diálogo Wireless ADB reparado
+
+### v1.3.1
+- ✅ Hotfix crash USB (corrutinas, RECEIVER_NOT_EXPORTED, try-catch)
+- ✅ ADB Inalámbrico (TCP/IP + TLS Pairing)
+
+### v1.3.0
+- ✅ Hotfix permisos USB (FLAG_MUTABLE, BroadcastReceiver)
+- ✅ Botón "Conectar Dispositivo" explícito
+
+---
