@@ -79,8 +79,7 @@ dependencies {
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.documentfile:documentfile:1.0.1")
 
-    // libsu - Root access library
-    implementation("com.github.topjohnwu.libsu:core:6.0.1")
-    implementation("com.github.topjohnwu.libsu:io:6.0.1")
-    implementation("com.github.topjohnwu.libsu:nio:6.0.1")
+    // libsu - Root access library (from jitpack.io)
+    implementation("com.github.topjohnwu.libsu:core:5.2.0")
+    implementation("com.github.topjohnwu.libsu:io:5.2.0")
 }
