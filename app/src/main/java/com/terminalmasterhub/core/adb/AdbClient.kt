@@ -78,7 +78,7 @@ class AdbClient(private val usbCore: UsbManagerCore) {
             if (messageType.toLong() == A_CNXN) {
                 // Parse max payload from CNXN
                 val arg1 = ByteBuffer.wrap(response, 8, 4).order(ByteOrder.LITTLE_ENDIAN).getInt()
-                if (arg1 and 0xFFFFFFFFL > 0L) {
+                if ((arg1.toLong() and 0xFFFFFFFFL) > 0L) {
                     maxPayload = minOf(arg1, MAX_PAYLOAD)
                 }
                 isConnected = true

@@ -195,7 +195,7 @@ class XiaomiFragment : Fragment() {
         appendLog("Destino: ${romDir.absolutePath}")
 
         val result = tgzExtractor.extract(tgzFile, romDir) { progress ->
-            withContext(Dispatchers.Main) {
+            lifecycleScope.launch(Dispatchers.Main) {
                 val pct = if (progress.totalBytes > 0) {
                     (progress.bytesExtracted * 100 / progress.totalBytes).toInt()
                 } else 0
