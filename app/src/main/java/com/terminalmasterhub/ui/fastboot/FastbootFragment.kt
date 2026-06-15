@@ -16,28 +16,26 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.terminalmasterhub.R
 import com.terminalmasterhub.TerminalMasterHubApp
-import com.terminalmasterhub.core.adb.AdbClient
 import com.terminalmasterhub.core.adb.FastbootClient
 import com.terminalmasterhub.core.file.FileManager
-import com.terminalmasterhub.core.usb.UsbBroadcastReceiver
-import com.terminalmasterhub.core.usb.UsbManagerCore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Fragmento de la sesión ADB/Fastboot Universal.
+ * Fragmento de Fastboot puro — sesión independiente solo para bootloader.
  *
  * Proporciona:
  * - Detección y conexión a dispositivos en modo fastboot
  * - Consola para comandos fastboot manuales
- * - Botones rápidos: devices, reboot, flash
- * - Información del dispositivo conectado
+ * - Botones rápidos: devices, reboot, flash, oem, getvar
+ * - Flasheo de imágenes de partición
+ * - Desbloqueo de bootloader
+ *
+ * NOTA: ADB tiene su propio fragmento independiente (AdbConsoleFragment).
  */
 class FastbootFragment : Fragment() {
-    private var hasRootChecked = false
-    private var isRooted = false
 
     private lateinit var deviceStatusText: TextView
     private lateinit var logView: TextView
@@ -46,14 +44,12 @@ class FastbootFragment : Fragment() {
     private lateinit var btnDevices: Button
     private lateinit var btnReboot: Button
     private lateinit var btnFlash: Button
+    private lateinit var btnGetvar: Button
+    private lateinit var btnOem: Button
 
     private val usbCore get() = TerminalMasterHubApp.instance.usbCore
     private val fastbootClient by lazy { FastbootClient(usbCore) }
-    private val adbClient by lazy { AdbClient(usbCore) }
-
-    private var currentMode: DeviceMode = DeviceMode.DISCONNECTED
-
-    enum class DeviceMode { DISCONNECTED, FASTBOOT, ADB }
+    private var fastbootConnected = false
 
     private val filePickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -87,22 +83,19 @@ class FastbootFragment : Fragment() {
         btnReboot = view.findViewById(R.id.btnFastbootReboot)
         btnFlash = view.findViewById(R.id.btnFastbootFlash)
 
-        checkRootAccess()
+        // Nuevos botones
+        btnGetvar = view.findViewById(R.id.btnFastbootGetvar)
+        btnOem = view.findViewById(R.id.btnFastbootOem)
+
         setupListeners()
         setupUsbReceiver()
+        appendLog("Fastboot listo. Conecta un dispositivo en modo bootloader.")
+        appendLog("Comandos: devices, flash, reboot, oem unlock, getvar all")
     }
 
     override fun onResume() {
         super.onResume()
-        checkConnectedDevices()
-    }
-
-    private fun checkRootAccess() {
-        lifecycleScope.launch {
-            val status = com.terminalmasterhub.core.root.RootChecker.checkRoot(requireContext())
-            isRooted = status.hasRoot
-            hasRootChecked = true
-        }
+        checkFastbootDevices()
     }
 
     private fun setupListeners() {
@@ -111,108 +104,123 @@ class FastbootFragment : Fragment() {
         }
 
         btnReboot.setOnClickListener {
-            lifecycleScope.launch { runFastbootCommand("reboot") }
+            val options = arrayOf("reboot", "reboot-bootloader", "reboot-recovery", "reboot-edl")
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Reiniciar dispositivo")
+                .setItems(options) { _, which ->
+                    lifecycleScope.launch { runFastbootCommand(options[which]) }
+                }
+                .show()
         }
 
         btnFlash.setOnClickListener {
             showFlashDialog()
         }
 
+        btnGetvar.setOnClickListener {
+            lifecycleScope.launch { runFastbootCommand("getvar all") }
+        }
+
+        btnOem.setOnClickListener {
+            val oemCmds = arrayOf(
+                "oem device-info",
+                "oem unlock",
+                "oem lock",
+                "flashing unlock",
+                "flashing lock",
+                "oem edl"
+            )
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Comandos OEM")
+                .setItems(oemCmds) { _, which ->
+                    lifecycleScope.launch { runFastbootCommand(oemCmds[which]) }
+                }
+                .show()
+        }
+
         btnSend.setOnClickListener {
-            val cmd = commandInput.text.toString().trim()
-            if (cmd.isNotEmpty()) {
-                commandInput.text.clear()
-                lifecycleScope.launch { runFastbootCommand(cmd) }
-            }
+            sendFastbootCommand()
         }
 
         commandInput.setOnEditorActionListener { _, _, _ ->
-            val cmd = commandInput.text.toString().trim()
-            if (cmd.isNotEmpty()) {
-                commandInput.text.clear()
-                lifecycleScope.launch { runFastbootCommand(cmd) }
-            }
-            true
+            sendFastbootCommand(); true
         }
+    }
+
+    private fun sendFastbootCommand(): Boolean {
+        val input = commandInput.text.toString().trim()
+        if (input.isEmpty()) return false
+        commandInput.text.clear()
+        lifecycleScope.launch { runFastbootCommand(input) }
+        return true
     }
 
     private fun setupUsbReceiver() {
-        UsbBroadcastReceiver.onDeviceDetached = { _ ->
-            deviceStatusText.text = getString(R.string.fastboot_no_device)
-            deviceStatusText.setTextColor(0xFFFF3333.toInt())
-            currentMode = DeviceMode.DISCONNECTED
-            appendLog("Dispositivo desconectado")
+        val filter = android.content.IntentFilter().apply {
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED)
         }
+        requireContext().registerReceiver(usbReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+    }
 
-        UsbBroadcastReceiver.onPermissionResult = { granted, device ->
-            if (granted && device != null) {
-                lifecycleScope.launch {
-                    connectToDevice(device.deviceId)
+    private val usbReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+            when (intent.action) {
+                android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
+                    appendLog("Dispositivo USB detectado. Verificando modo Fastboot...")
+                    lifecycleScope.launch { checkFastbootDevices() }
+                }
+                android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED -> {
+                    fastbootConnected = false
+                    deviceStatusText.text = "Ningún dispositivo conectado"
+                    deviceStatusText.setTextColor(0xFFFF3333.toInt())
+                    appendLog("Dispositivo USB desconectado")
                 }
             }
         }
     }
 
-    private fun checkConnectedDevices() {
+    private suspend fun checkFastbootDevices() {
         val devices = usbCore.getAttachedDevices()
-        for ((_, device) in devices) {
-            when {
-                usbCore.isFastbootMode(device) -> {
-                    deviceStatusText.text = "${usbCore.getVendorName(device)} - Fastboot"
-                    deviceStatusText.setTextColor(0xFF00FF41.toInt())
-                    currentMode = DeviceMode.FASTBOOT
-                    appendLog("Dispositivo Fastboot detectado: ${device.productName ?: "Desconocido"}")
-                    lifecycleScope.launch { fastbootClient.connect() }
-                }
-                !usbCore.isSamsungDownloadMode(device) -> {
-                    deviceStatusText.text = "${usbCore.getVendorName(device)} - Modo ADB"
-                    deviceStatusText.setTextColor(0xFF3399FF.toInt())
-                    currentMode = DeviceMode.ADB
-                    appendLog("Dispositivo ADB detectado: ${device.productName ?: "Desconocido"}")
-                    lifecycleScope.launch { adbClient.connect() }
-                }
-            }
+        val fastbootDevice = devices.values.firstOrNull { device ->
+            usbCore.isFastbootMode(device)
         }
-    }
 
-    private suspend fun connectToDevice(deviceId: Int) {
-        appendLog("Conectando al dispositivo...")
-        val connected = fastbootClient.connect()
-        if (connected) {
-            currentMode = DeviceMode.FASTBOOT
-            deviceStatusText.text = "Fastboot conectado"
+        if (fastbootDevice != null) {
+            deviceStatusText.text = "${usbCore.getVendorName(fastbootDevice)} - Fastboot"
             deviceStatusText.setTextColor(0xFF00FF41.toInt())
-            appendLog("✓ Conectado a Fastboot")
-
-            // Mostrar info del dispositivo
-            val info = fastbootClient.getDeviceInfo()
-            appendLog("Producto: ${info["product"] ?: "N/A"}")
-            appendLog("Bootloader: ${info["version-bootloader"] ?: "N/A"}")
-        } else {
-            appendLog("✗ No se pudo conectar en modo Fastboot")
-            // Intentar ADB
-            val adbConnected = adbClient.connect()
-            if (adbConnected) {
-                currentMode = DeviceMode.ADB
-                deviceStatusText.text = "ADB conectado"
-                deviceStatusText.setTextColor(0xFF3399FF.toInt())
-                appendLog("✓ Conectado a ADB")
+            appendLog("Dispositivo Fastboot detectado: ${fastbootDevice.productName ?: "Desconocido"}")
+            fastbootConnected = fastbootClient.connect()
+            if (fastbootConnected) {
+                appendLog("✅ Fastboot conectado")
+                // Mostrar info básica
+                val info = fastbootClient.getDeviceInfo()
+                appendLog("Producto: ${info["product"] ?: "N/A"}")
+                appendLog("Bootloader: ${info["version-bootloader"] ?: "N/A"}")
+            } else {
+                appendLog("⚠️  No se pudo conectar en modo Fastboot")
             }
+        } else {
+            deviceStatusText.text = "Ningún dispositivo conectado"
+            deviceStatusText.setTextColor(0xFFFF3333.toInt())
+            fastbootConnected = false
         }
     }
 
     private suspend fun runFastbootCommand(command: String) {
         appendLog("fastboot $command")
 
-        val result = when (currentMode) {
-            DeviceMode.FASTBOOT -> fastbootClient.sendCommand(command)
-            DeviceMode.ADB -> adbClient.shellCommand(command)
-            DeviceMode.DISCONNECTED -> {
-                appendLog("No hay dispositivo conectado. Verifica la conexión OTG.")
+        if (!fastbootConnected) {
+            val success = fastbootClient.connect()
+            if (!success) {
+                appendLog("Error: No hay dispositivo Fastboot conectado.")
+                appendLog("Verifica que el dispositivo esté en modo bootloader.")
                 return
             }
+            fastbootConnected = true
         }
 
+        val result = fastbootClient.sendCommand(command)
         if (result != null) {
             appendLog(result)
         } else {
@@ -225,7 +233,7 @@ class FastbootFragment : Fragment() {
         var selectedPartition = "boot"
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Flashear imagen")
+            .setTitle("Flashear imagen Fastboot")
             .setMessage("Selecciona la partición y luego el archivo .img")
             .setSingleChoiceItems(partitions, 0) { _, which ->
                 selectedPartition = partitions[which]
@@ -250,13 +258,9 @@ class FastbootFragment : Fragment() {
         }
 
         withContext(Dispatchers.IO) {
-            val success = if (currentMode == DeviceMode.FASTBOOT) {
-                fastbootClient.flashPartition("boot", file) { sent, total ->
-                    val pct = if (total > 0) (sent * 100 / total) else 0
-                    appendLog("Progreso: $pct% ($sent/$total bytes)")
-                }
-            } else {
-                false
+            val success = fastbootClient.flashPartition("boot", file) { sent, total ->
+                val pct = if (total > 0) (sent * 100 / total) else 0
+                appendLog("Progreso: $pct% ($sent/$total bytes)")
             }
 
             withContext(Dispatchers.Main) {
@@ -272,9 +276,13 @@ class FastbootFragment : Fragment() {
     private fun appendLog(text: String) {
         requireActivity().runOnUiThread {
             logView.append("$text\n")
-            // Auto-scroll
             val scrollView = view?.findViewById<android.widget.ScrollView>(R.id.fastbootLogScroll)
             scrollView?.fullScroll(View.FOCUS_DOWN)
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try { requireContext().unregisterReceiver(usbReceiver) } catch (_: Exception) {}
     }
 }

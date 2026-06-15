@@ -37,4 +37,18 @@
     <string name="dev_telegram">https://t.me/Michael_Antonio_Rodriguez</string>
     <string name="dev_facebook">https://www.facebook.com/share/1D1pfVdbXE</string>
     <string name="dev_github">https://github.com/MichaelARC-NI</string>
+
+    <!-- ADB Console -->
+    <string name="adb_no_device">Ningún dispositivo conectado</string>
+    <string name="adb_connected">Dispositivo ADB conectado</string>
+    <string name="adb_hint">Comando ADB…</string>
+    <string name="adb_devices">Listar dispositivos</string>
+    <string name="adb_shell">Abrir shell</string>
+    <string name="adb_push">Enviar archivo</string>
+    <string name="adb_pull">Recibir archivo</string>
+
+    <!-- Fastboot (puro) -->
+    <string name="fastboot_getvar">Obtener variables</string>
+    <string name="fastboot_oem">Comandos OEM</string>
+    <string name="fastboot_reboot_options">Opciones de reinicio</string>
 </resources>

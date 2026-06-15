@@ -17,7 +17,7 @@ import com.terminalmasterhub.core.permissions.PermissionManager
 import com.terminalmasterhub.core.usb.UsbBroadcastReceiver
 import com.terminalmasterhub.core.usb.UsbManagerCore
 import com.terminalmasterhub.ui.SessionPagerAdapter
-import com.terminalmasterhub.ui.fastboot.FastbootFragment
+import com.terminalmasterhub.ui.fastboot.FastbootHostFragment
 import com.terminalmasterhub.ui.samsung.SamsungOdinFragment
 import com.terminalmasterhub.ui.terminal.TerminalFragment
 import com.terminalmasterhub.ui.xiaomi.XiaomiFragment
@@ -41,7 +41,7 @@ class MainActivity : AppCompatActivity() {
 
     // Fragmentos de cada sesión
     private val terminalFragment = TerminalFragment()
-    private val fastbootFragment = FastbootFragment()
+    private val fastbootHostFragment = FastbootHostFragment()
     private val samsungFragment = SamsungOdinFragment()
     private val xiaomiFragment = XiaomiFragment()
 
@@ -76,7 +76,7 @@ class MainActivity : AppCompatActivity() {
         pagerAdapter = SessionPagerAdapter(this)
         pagerAdapter.setFragments(
             terminalFragment,
-            fastbootFragment,
+            fastbootHostFragment,
             samsungFragment,
             xiaomiFragment
         )

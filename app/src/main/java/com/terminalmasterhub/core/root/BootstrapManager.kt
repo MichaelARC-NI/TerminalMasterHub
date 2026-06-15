@@ -8,12 +8,20 @@ import java.io.File
 class BootstrapManager(private val context: Context) {
 
     companion object {
-        const val PREFIX_DIR = "linux_prefix"
+        /** Directorio PREFIX: apunta a /data/data/com.terminalmasterhub/files/usr
+         *  Los binarios se instalan en $PREFIX/bin/
+         *  PREFIX y PATH se configuran como variables de entorno para que
+         *  apt, python, tar y las herramientas funcionen sin root. */
+        const val PREFIX_DIR = "usr"
         val REQUIRED_PACKAGES = listOf(
             "apt", "bash", "python3", "zstd",
             "p7zip", "tar", "unrar", "unzip",
             "nano", "neovim"
         )
+
+        /** Ruta completa PREFIX usada en scripts de entorno */
+        fun getPrefixPath(context: Context): String =
+            File(context.filesDir, PREFIX_DIR).absolutePath
     }
 
     data class BootstrapStatus(
@@ -35,41 +43,52 @@ class BootstrapManager(private val context: Context) {
 
     fun getStatus(): BootstrapStatus {
         val prefix = getPrefixDir()
+        val p = prefix.absolutePath
         if (!isInstalled()) {
-            return BootstrapStatus(prefixPath = prefix.absolutePath, message = "No instalado")
+            return BootstrapStatus(prefixPath = p, message = "No instalado")
         }
         val installed = REQUIRED_PACKAGES.filter { pkg ->
-            File(prefix, "bin/$pkg").exists() || File(prefix, "usr/bin/$pkg").exists()
+            File(prefix, "bin/$pkg").exists()
         }
         return BootstrapStatus(
             isInstalled = true,
-            prefixPath = prefix.absolutePath,
+            prefixPath = p,
             packages = installed,
             totalSize = getDirSize(prefix),
-            message = "Listo: ${installed.size}/${REQUIRED_PACKAGES.size} paquetes"
+            message = "PREFIX=$p ${installed.size}/${REQUIRED_PACKAGES.size} paquetes"
         )
     }
 
     suspend fun install(): BootstrapStatus = withContext(Dispatchers.IO) {
         try {
             val prefix = getPrefixDir()
+            val prefixPath = prefix.absolutePath
             if (prefix.exists()) prefix.deleteRecursively()
             prefix.mkdirs()
 
             onProgress?.invoke("Creando estructura de directorios...", 10)
-            for (dir in listOf("bin", "usr/bin", "usr/lib", "etc", "home", "tmp", "var/log")) {
+            // Estructura tipo Termux: $PREFIX/bin, $PREFIX/etc, $PREFIX/lib, $PREFIX/tmp
+            for (dir in listOf("bin", "etc", "lib", "home", "tmp", "var/log")) {
                 File(prefix, dir).mkdirs()
             }
 
             onProgress?.invoke("Configurando bash...", 30)
-            // Create bash wrapper - use string concatenation to avoid $ escaping issues
+            // Crear script bash wrapper que configura PREFIX y PATH automáticamente
             val bashLines = listOf(
                 "#!/system/bin/sh",
+                "#",
                 "# Terminal Master Hub Bootstrap Shell",
-                "echo \"Bootstrap listo. Comandos: apt, python3, tar, unzip, nano\"",
-                "echo \"Usa 'exit' para volver a la terminal principal.\"",
+                "# Entorno aislado tipo Termux - PREFIX=$prefixPath",
+                "#",
+                "export PREFIX=$prefixPath",
+                "export PATH=$prefixPath/bin:/system/bin:/system/xbin",
+                "export HOME=$prefixPath/home",
+                "export TMPDIR=$prefixPath/tmp",
+                "",
+                "echo \"Bootstrap listo. Comandos: apt, python3, tar, zstd, unzip, nano\"",
+                "echo \"PREFIX=\$PREFIX  PATH=\$PATH\"",
                 "while true; do",
-                "    printf \"root@tmh:~# \"",
+                "    printf \"root@tmh:\$PREFIX # \"",
                 "    read cmd_input",
                 "    case \"\${cmd_input}\" in",
                 "        exit|quit) break;;",
@@ -82,63 +101,82 @@ class BootstrapManager(private val context: Context) {
             File(prefix, "bin/sh").writeText(bashLines.joinToString("\n") + "\n")
             File(prefix, "bin/sh").setExecutable(true)
 
-            onProgress?.invoke("Creando wrappers de paquetes...", 50)
+            onProgress?.invoke("Creando wrappers de paquetes en \$PREFIX/bin...", 50)
             for (cmd in REQUIRED_PACKAGES) {
                 val wrapper = "#!/system/bin/sh\n" +
-                        "# Wrapper for $cmd\n" +
-                        "echo \"[Bootstrap] $cmd ejecutado desde el sistema\"\n" +
-                        "/system/bin/$cmd \"\$@\" 2>/dev/null || " +
-                        "/system/xbin/$cmd \"\$@\" 2>/dev/null || " +
-                        "echo \"Comando no encontrado\"\n"
+                        "# Wrapper for $cmd - PREFIX=$prefixPath\n" +
+                        "export PREFIX=$prefixPath\n" +
+                        "export PATH=$prefixPath/bin:/system/bin:/system/xbin\n" +
+                        "if command -v $cmd >/dev/null 2>&1; then\n" +
+                        "    exec $cmd \"\$@\"\n" +
+                        "elif [ -f $prefixPath/bin/$cmd ]; then\n" +
+                        "    exec $prefixPath/bin/$cmd \"\$@\"\n" +
+                        "elif [ -f /system/bin/$cmd ]; then\n" +
+                        "    exec /system/bin/$cmd \"\$@\"\n" +
+                        "elif [ -f /system/xbin/$cmd ]; then\n" +
+                        "    exec /system/xbin/$cmd \"\$@\"\n" +
+                        "else\n" +
+                        "    echo \"$cmd: comando no disponible en este entorno\"\n" +
+                        "    exit 127\n" +
+                        "fi\n"
                 File(prefix, "bin/$cmd").apply {
                     writeText(wrapper)
                     setExecutable(true)
                 }
             }
 
-            onProgress?.invoke("Configurando entorno...", 70)
-            val p = prefix.absolutePath
+            onProgress?.invoke("Configurando variables de entorno (PREFIX, PATH)...", 70)
+            // Generar environment.prop con las variables para el bootstrap
+            val envContent = listOf(
+                "export PREFIX=$prefixPath",
+                "export PATH=$prefixPath/bin:/system/bin:/system/xbin",
+                "export HOME=$prefixPath/home",
+                "export TMPDIR=$prefixPath/tmp"
+            ).joinToString("\n") + "\n"
+
             File(prefix, "home/.bashrc").writeText("alias ll='ls -la'\nalias la='ls -A'\n")
-            File(prefix, "etc/environment").writeText(
-                "export PREFIX=$p\n" +
-                "export PATH=$p/bin:$p/usr/bin:\$PATH\n" +
-                "export HOME=$p/home\n" +
-                "export TMPDIR=$p/tmp\n"
-            )
+            File(prefix, "etc/environment").writeText(envContent)
 
             onProgress?.invoke("Verificando...", 90)
             val installed = REQUIRED_PACKAGES.filter { pkg ->
-                File(prefix, "bin/$pkg").exists()
+                File(prefixPath, "bin/$pkg").exists()
             }
+            // Crear script init.sh para fuentear variables
+            File(prefix, "etc/init.sh").writeText(envContent)
+            File(prefix, "etc/init.sh").setExecutable(true)
 
             onProgress?.invoke("Completado!", 100)
             BootstrapStatus(
                 isInstalled = true,
-                prefixPath = p,
+                prefixPath = prefixPath,
                 packages = installed,
                 totalSize = getDirSize(prefix),
-                message = "Bootstrap: ${installed.size}/${REQUIRED_PACKAGES.size}"
+                message = "PREFIX=$prefixPath ${installed.size}/${REQUIRED_PACKAGES.size} paquetes"
             )
         } catch (e: Exception) {
             BootstrapStatus(message = "Error: ${e.message}")
         }
     }
 
+    /** Genera script init.sh que exporta PREFIX, PATH, HOME, TMPDIR */
     fun getInitScript(): String {
         val p = getPrefixDir().absolutePath
         return "#!/system/bin/sh\n" +
+                "# Terminal Master Hub - Init script\n" +
                 "export PREFIX=$p\n" +
-                "export PATH=$p/bin:\$PATH\n" +
+                "export PATH=$p/bin:/system/bin:/system/xbin\n" +
                 "export HOME=$p/home\n" +
+                "export TMPDIR=$p/tmp\n" +
                 "cd \$HOME\n" +
                 "exec \$PREFIX/bin/bash\n"
     }
 
+    /** Ejecuta un comando dentro del entorno PREFIX */
     suspend fun executeInBootstrap(command: String): String = withContext(Dispatchers.IO) {
         val p = getPrefixDir().absolutePath
         val env = mapOf(
             "PREFIX" to p,
-            "PATH" to "$p/bin:$p/usr/bin",
+            "PATH" to "$p/bin:/system/bin:/system/xbin",
             "HOME" to "$p/home",
             "TMPDIR" to "$p/tmp"
         )

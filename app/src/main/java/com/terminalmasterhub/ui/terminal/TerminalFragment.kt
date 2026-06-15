@@ -103,28 +103,14 @@ class TerminalFragment : Fragment() {
     // ===================== FEATURE 1: BANNER DINÁMICO =====================
 
     private fun printWelcome() {
-        val columns = calculateColumns()
-        val safeWidth = columns.coerceIn(30, 80)
-        val innerWidth = safeWidth - 4
-
-        val title1 = "Terminal Master Hub v1.1"
-        val title2 = "Terminal Linux + Python IDE + Root Tools"
-        val title3 = "by $DEV_NAME"
-
-        val line = "═".repeat(safeWidth - 2)
-        val pad1 = " ".repeat((innerWidth - title1.length).coerceAtLeast(0) / 2)
-        val pad2 = " ".repeat((innerWidth - title2.length).coerceAtLeast(0) / 2)
-        val pad3 = " ".repeat((innerWidth - title3.length).coerceAtLeast(0) / 2)
-
+        // Banner limpio sin bordes ASCII — solo texto con MONOSPACE
         val rootBadge = if (hasRootAccess) " [ROOT]" else ""
         val bootstrapBadge = if (bootstrapManager.isInstalled()) " [LINUX]" else ""
 
         val welcome = """
-╔${line}╗
-║ ${pad1}${title1}${" ".repeat((innerWidth - title1.length - pad1.length).coerceAtLeast(0))} ║
-║ ${pad2}${title2}${" ".repeat((innerWidth - title2.length - pad2.length).coerceAtLeast(0))} ║
-║ ${pad3}${title3}${" ".repeat((innerWidth - title3.length - pad3.length).coerceAtLeast(0))} ║
-╚${line}╝
+Terminal Master Hub v1.1
+Terminal Linux + Python IDE + Root Tools
+by $DEV_NAME
 
 Estado: Terminal lista$rootBadge$bootstrapBadge
 

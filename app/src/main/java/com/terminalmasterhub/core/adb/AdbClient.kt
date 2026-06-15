@@ -206,6 +206,30 @@ class AdbClient(private val usbCore: UsbManagerCore) {
         return@withContext info
     }
 
+
+    /**
+     * Extrae un archivo del dispositivo (adb pull).
+     * Usa shell + base64 como fallback para archivos pequeños.
+     */
+    suspend fun pullFile(remotePath: String, localPath: String): String? =
+        withContext(Dispatchers.IO) {
+            if (!isConnected) return@withContext "Error: ADB no conectado"
+            try {
+                val localFile = java.io.File(localPath)
+                val cmd = "cat '$remotePath' 2>/dev/null | base64 -w0"
+                val result = shellCommand(cmd)
+                if (result != null && result.isNotEmpty()) {
+                    val bytes = android.util.Base64.decode(result.trim(), android.util.Base64.DEFAULT)
+                    localFile.parentFile?.mkdirs()
+                    localFile.writeBytes(bytes)
+                    return@withContext "Extraído: $remotePath -> $localPath (${bytes.size} bytes)"
+                }
+                return@withContext "Error: No se pudo leer el archivo remoto"
+            } catch (e: Exception) {
+                return@withContext "Error: ${e.message}"
+            }
+        }
+
     // ===================== PRIVATE HELPERS =====================
 
     private fun buildConnectMessage(): ByteArray {
