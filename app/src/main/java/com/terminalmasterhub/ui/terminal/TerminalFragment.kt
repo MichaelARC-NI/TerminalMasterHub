@@ -129,8 +129,8 @@ Comandos:
   explorer   — Explorador de archivos
   social     — Redes sociales
   about      — Acerca de
-  ubuntu     — Gestionar Ubuntu ARM64 (PRoot)
-  proot      — Estado de PRoot
+  ubuntu     — Gestionar Ubuntu ARM64
+  proot      — Estado de Ubuntu ARM64
   mode       — Cambiar modo (ubuntu/local)
 
 """.trimIndent()
@@ -305,9 +305,9 @@ App Android todo-en-uno:
     }
 
     private suspend fun handleProotInstall() {
-        appendOutput("=== Instalando PRoot + Ubuntu ARM64 ===")
+        appendOutput("=== Instalando Ubuntu ARM64 ===")
         appendOutput("")
-        appendOutput("Entorno Ubuntu 24.04 completo para ARM64 usando PRoot.")
+        appendOutput("Entorno Ubuntu 24.04 ARM64 con linker directo (sin PRoot).")
         appendOutput("Basado en el enfoque de Termux y Kali NetHunter.")
         appendOutput("")
 
@@ -362,17 +362,11 @@ App Android todo-en-uno:
         appendOutput("")
         appendOutput("✅ Instalacion completada exitosamente!")
         appendOutput("")
-        appendOutput("Comandos disponibles ahora:
-  mode ubuntu  - Activar modo Ubuntu (linker directo)
-  apt update   - Actualizar paquetes
-  apt install python3 cmus - Instalar herramientas")
-        appendOutput("  mode ubuntu  - Activar modo Ubuntu (PRoot)")
+        appendOutput("Comandos disponibles ahora:")
+        appendOutput("  mode ubuntu  - Activar modo Ubuntu (linker directo)")
         appendOutput("  mode local   - Volver al modo Bootstrap local")
         appendOutput("  apt update   - Actualizar paquetes Ubuntu")
-        appendOutput("  apt install python3 - Instalar Python")
-        appendOutput("  apt install cmus    - Instalar reproductor de musica")
-        appendOutput("  python3      - Python en Ubuntu")
-        appendOutput("  cmus         - Reproductor de musica en terminal")
+        appendOutput("  apt install python3 cmus - Instalar herramientas")
         appendOutput("")
         useProotMode = true
         appendOutput("Modo Ubuntu ARM64 activado automaticamente!")
