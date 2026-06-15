@@ -95,7 +95,7 @@ class FastbootFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        checkFastbootDevices()
+        lifecycleScope.launch { checkFastbootDevices() }
     }
 
     private fun setupListeners() {

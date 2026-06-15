@@ -1,7 +1,9 @@
 package com.terminalmasterhub.ui.fastboot
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -43,34 +45,6 @@ class AdbConsoleFragment : Fragment() {
     private val adbClient by lazy { AdbClient(usbCore) }
     private var adbConnected = false
 
-    private val filePickerPush = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val uri = result.data?.data
-            uri?.let {
-                val path = uri.path?.substringAfter(":")?.let { "/storage/emulated/0/$it" }
-                if (path != null) {
-                    lifecycleScope.launch { pushFile(path) }
-                }
-            }
-        }
-    }
-
-    private val filePickerPull = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val uri = result.data?.data
-            uri?.let {
-                val destPath = uri.path?.substringAfter(":")?.let { "/storage/emulated/0/$it" }
-                if (destPath != null) {
-                    lifecycleScope.launch { pullFile(destPath) }
-                }
-            }
-        }
-    }
-
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -98,7 +72,7 @@ class AdbConsoleFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        checkAdbDevices()
+        lifecycleScope.launch { checkAdbDevices() }
     }
 
     private fun setupListeners() {
@@ -113,15 +87,11 @@ class AdbConsoleFragment : Fragment() {
         }
 
         btnPush.setOnClickListener {
-            // Push mediante entrada de consola: push <local> <remoto>
-            val input = commandInput.text.toString().trim()
             commandInput.setText("push ")
             commandInput.setSelection(5)
         }
 
         btnPull.setOnClickListener {
-            // Pull mediante entrada de consola: pull <remoto> [local]
-            val input = commandInput.text.toString().trim()
             commandInput.setText("pull ")
             commandInput.setSelection(5)
         }
@@ -144,15 +114,15 @@ class AdbConsoleFragment : Fragment() {
     }
 
     private fun setupUsbReceiver() {
-        val filter = android.content.IntentFilter().apply {
+        val filter = IntentFilter().apply {
             addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED)
         }
         requireContext().registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
     }
 
-    private val usbReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+    private val usbReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
                     appendLog("Dispositivo USB detectado. Verificando modo ADB...")
@@ -180,9 +150,9 @@ class AdbConsoleFragment : Fragment() {
             appendLog("Dispositivo: ${adbDevice.productName ?: adbDevice.deviceName}")
             adbConnected = adbClient.connect()
             if (adbConnected) {
-                appendLog("✅ ADB conectado")
+                appendLog("ADB conectado")
             } else {
-                appendLog("⚠️  No se pudo establecer conexión ADB (puede requerir autorización)")
+                appendLog("No se pudo establecer conexion ADB (puede requerir autorizacion)")
             }
         } else {
             deviceStatusText.text = "Desconectado"
@@ -197,18 +167,21 @@ class AdbConsoleFragment : Fragment() {
         if (!adbConnected && command != "devices") {
             val success = adbClient.connect()
             if (!success) {
-                appendLog("Error: No hay conexión ADB. Verifica el cable OTG.")
+                appendLog("Error: No hay conexion ADB. Verifica el cable OTG.")
                 return
             }
             adbConnected = true
         }
 
-        val result = when {
+        val result: String? = when {
             command == "devices" -> {
                 val devices = usbCore.getAttachedDevices()
-                if (devices.isEmpty()) "List of devices attached\n\nNingún dispositivo"
-                else "List of devices attached\n" + devices.entries.joinToString("\n") { (_, d) ->
-                    "${d.deviceName}\t${usbCore.getVendorName(d)}"
+                if (devices.isEmpty()) {
+                    "List of devices attached\n\nNingun dispositivo"
+                } else {
+                    "List of devices attached\n" + devices.entries.joinToString("\n") { (_, d) ->
+                        "${d.deviceName}\t${usbCore.getVendorName(d)}"
+                    }
                 }
             }
             command.startsWith("shell ") -> {
@@ -219,18 +192,18 @@ class AdbConsoleFragment : Fragment() {
                 adbClient.shellCommand("")
             }
             command.startsWith("push ") -> {
-                val parts = command.removePrefix("push ").trim().split("\s+".toRegex())
+                val parts = command.removePrefix("push ").trim().split("\\s+".toRegex())
                 if (parts.size >= 2) {
                     val local = parts[0]
                     val remote = parts[1]
                     val success = adbClient.pushFile(local, remote)
-                    if (success) "✅ Archivo enviado: $local -> $remote" else "❌ Error al enviar archivo"
+                    if (success) "Archivo enviado: $local -> $remote" else "Error al enviar archivo"
                 } else {
                     "Uso: push <local> <remoto>"
                 }
             }
             command.startsWith("pull ") -> {
-                val parts = command.removePrefix("pull ").trim().split("\s+".toRegex())
+                val parts = command.removePrefix("pull ").trim().split("\\s+".toRegex())
                 val remote = parts[0]
                 val local = if (parts.size >= 2) parts[1] else "/storage/emulated/0/${remote.substringAfterLast("/")}"
                 adbClient.pullFile(remote, local)
@@ -242,26 +215,6 @@ class AdbConsoleFragment : Fragment() {
             appendLog(result)
         } else {
             appendLog("Error: Sin respuesta")
-        }
-    }
-
-    private suspend fun pushFile(localPath: String) {
-        appendLog("adb push $localPath /sdcard/")
-        val result = adbClient.pushFile(localPath, "/sdcard/")
-        if (result != null) {
-            appendLog(result)
-        } else {
-            appendLog("Error al hacer push")
-        }
-    }
-
-    private suspend fun pullFile(destPath: String) {
-        appendLog("adb pull /sdcard/ $destPath")
-        val result = adbClient.pullFile("/sdcard/", destPath)
-        if (result != null) {
-            appendLog(result)
-        } else {
-            appendLog("Error al hacer pull")
         }
     }
 
