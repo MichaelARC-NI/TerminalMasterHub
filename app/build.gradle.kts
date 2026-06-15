@@ -11,8 +11,8 @@ android {
         applicationId = "com.terminalmasterhub"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "1.3.8"
+        versionCode = 13
+        versionName = "1.3.9"
     }
 
     buildTypes {
@@ -37,6 +37,13 @@ android {
 
     buildFeatures {
         viewBinding = true
+    }
+
+    aaptOptions {
+        // No comprimir rootfs Ubuntu dentro del APK
+        // AssetManager lee archivos sin comprimir directamente
+        // Evita errores de memoria con archivos grandes >10MB
+        noCompress += listOf("tar.gz", "gz", "tar")
     }
 
     packaging {

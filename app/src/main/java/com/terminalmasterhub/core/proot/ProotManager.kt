@@ -12,7 +12,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Gestor de PRoot + Ubuntu ARM64 para Terminal Master Hub v1.3.8.
+ * Gestor de PRoot + Ubuntu ARM64 para Terminal Master Hub v1.3.9.
  *
  * Proporciona un entorno Linux completo (Ubuntu 24.04 ARM64)
  * usando PRoot para evitar necesidad de root.
@@ -39,7 +39,7 @@ class ProotManager(private val context: Context) {
 
         // URLs de descarga por si los assets no estan disponibles
         // GitHub Release - fuente principal de descarga
-        const val GITHUB_RELEASE = "https://github.com/MichaelARC-NI/TerminalMasterHub/releases/download/v1.3.8"
+        const val GITHUB_RELEASE = "https://github.com/MichaelARC-NI/TerminalMasterHub/releases/download/v1.3.9"
         const val GITHUB_ROOTFS_URL = "$GITHUB_RELEASE/ubuntu-base-24.04.4-base-arm64.tar.gz"
         const val GITHUB_PROOT_URL = "$GITHUB_RELEASE/proot-arm64"
 
