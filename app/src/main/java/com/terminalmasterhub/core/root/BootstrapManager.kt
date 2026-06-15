@@ -210,11 +210,11 @@ export PATH=$prefixPath/bin:/system/bin:/system/xbin
 export TMPDIR=$prefixPath/tmp
 export LANG=en_US.UTF-8
 export LC_ALL=C
-cd $HOME
-if [ -f "$HOME/.bashrc" ]; then
-    . "$HOME/.bashrc"
+cd ${'$'}HOME
+if [ -f "${'$'}HOME/.bashrc" ]; then
+    . "${'$'}HOME/.bashrc"
 fi
-exec $PREFIX/bin/bash
+exec ${'$'}PREFIX/bin/bash
 """
             File(prefix, "etc/init.sh").writeText(initContent)
             File(prefix, "etc/init.sh").setExecutable(true)
@@ -244,11 +244,11 @@ export PATH=$p/bin:/system/bin:/system/xbin
 export TMPDIR=$p/tmp
 export LANG=en_US.UTF-8
 export LC_ALL=C
-cd $HOME
-if [ -f "$HOME/.bashrc" ]; then
-    . "$HOME/.bashrc"
+cd ${'$'}HOME
+if [ -f "${'$'}HOME/.bashrc" ]; then
+    . "${'$'}HOME/.bashrc"
 fi
-exec $PREFIX/bin/bash
+exec ${'$'}PREFIX/bin/bash
 """
     }
 
