@@ -37,7 +37,7 @@ import java.io.File
  */
 class FastbootFragment : Fragment() {
     private var hasRootChecked = false
-    private var isRooted = false {
+    private var isRooted = false
 
     private lateinit var deviceStatusText: TextView
     private lateinit var logView: TextView
