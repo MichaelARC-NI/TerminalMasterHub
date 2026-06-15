@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -17,18 +19,17 @@ import androidx.lifecycle.lifecycleScope
 import com.terminalmasterhub.R
 import com.terminalmasterhub.TerminalMasterHubApp
 import com.terminalmasterhub.core.adb.AdbClient
+import com.terminalmasterhub.core.usb.UsbManagerCore
 import kotlinx.coroutines.launch
 
 /**
  * Fragmento de consola ADB Shell interactiva.
  *
- * Sesión independiente de Fastboot. Proporciona:
- * - adb devices
- * - adb shell (bash del dispositivo conectado)
- * - adb push/pull de archivos
- * - Comandos de depuración
- *
- * Completamente separado del módulo Fastboot.
+ * Maneja el flujo completo de permisos USB:
+ * 1. Detecta dispositivos conectados
+ * 2. Solicita permiso al usuario via PendingIntent (FLAG_MUTABLE)
+ * 3. Espera la respuesta del BroadcastReceiver
+ * 4. Si concedido, inicia conexion ADB + handshake
  */
 class AdbConsoleFragment : Fragment() {
 
@@ -44,6 +45,7 @@ class AdbConsoleFragment : Fragment() {
     private val usbCore get() = TerminalMasterHubApp.instance.usbCore
     private val adbClient by lazy { AdbClient(usbCore) }
     private var adbConnected = false
+    private var pendingDevice: UsbDevice? = null
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -67,7 +69,7 @@ class AdbConsoleFragment : Fragment() {
         setupListeners()
         setupUsbReceiver()
         appendLog("ADB Console listo. Conecta un dispositivo USB en modo debug.")
-        appendLog("Comandos: devices, shell, push <local> <remoto>, pull <remoto> [local]")
+        appendLog("Comandos: devices, shell, push, pull")
     }
 
     override fun onResume() {
@@ -77,7 +79,11 @@ class AdbConsoleFragment : Fragment() {
 
     private fun setupListeners() {
         btnDevices.setOnClickListener {
-            lifecycleScope.launch { runAdbCommand("devices") }
+            lifecycleScope.launch {
+                // Al presionar "devices", forzar solicitud de permiso si hay dispositivo
+                requestUsbPermission()
+                runAdbCommand("devices")
+            }
         }
 
         btnShell.setOnClickListener {
@@ -113,10 +119,13 @@ class AdbConsoleFragment : Fragment() {
         return true
     }
 
+    // ===================== PERMISOS USB =====================
+
     private fun setupUsbReceiver() {
         val filter = IntentFilter().apply {
-            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED)
-            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED)
+            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+            addAction(UsbManagerCore.ACTION_USB_PERMISSION)
         }
         requireContext().registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
     }
@@ -124,19 +133,59 @@ class AdbConsoleFragment : Fragment() {
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
-                    appendLog("Dispositivo USB detectado. Verificando modo ADB...")
+                UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
+                    val device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                    appendLog("Dispositivo USB detectado: ${device?.productName ?: "Desconocido"}")
                     lifecycleScope.launch { checkAdbDevices() }
                 }
-                android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED -> {
+
+                UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                     adbConnected = false
+                    pendingDevice = null
                     deviceStatusText.text = "Desconectado"
                     deviceStatusText.setTextColor(0xFFFF3333.toInt())
                     appendLog("Dispositivo USB desconectado")
                 }
+
+                UsbManagerCore.ACTION_USB_PERMISSION -> {
+                    val device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                    val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+                    if (granted && device != null) {
+                        appendLog("Permiso USB CONCEDIDO para: ${device.productName ?: device.deviceName}")
+                        deviceStatusText.text = "${usbCore.getVendorName(device)} (permiso OK)"
+                        deviceStatusText.setTextColor(0xFF00FF41.toInt())
+                        // Proceder con la conexion ADB
+                        lifecycleScope.launch {
+                            connectToDevice(device)
+                        }
+                    } else if (!granted) {
+                        appendLog("Permiso USB DENEGADO. No se puede acceder al dispositivo.")
+                        deviceStatusText.text = "Permiso denegado"
+                        deviceStatusText.setTextColor(0xFFFF3333.toInt())
+                    }
+                }
             }
         }
     }
+
+    /**
+     * Solicita permiso USB para el primer dispositivo ADB detectado.
+     */
+    private suspend fun requestUsbPermission() {
+        val devices = usbCore.getAttachedDevices()
+        val adbDevice = devices.values.firstOrNull { device ->
+            !usbCore.isFastbootMode(device) && !usbCore.isSamsungDownloadMode(device)
+        }
+        if (adbDevice != null) {
+            val usbManager = requireContext().getSystemService(Context.USB_SERVICE) as UsbManager
+            if (!usbManager.hasPermission(adbDevice)) {
+                appendLog("Solicitando permiso USB para: ${adbDevice.productName ?: adbDevice.deviceName}")
+                usbCore.requestPermission(adbDevice)
+            }
+        }
+    }
+
+    // ===================== DETECCION DE DISPOSITIVOS =====================
 
     private suspend fun checkAdbDevices() {
         val devices = usbCore.getAttachedDevices()
@@ -145,29 +194,61 @@ class AdbConsoleFragment : Fragment() {
         }
 
         if (adbDevice != null) {
-            deviceStatusText.text = "${usbCore.getVendorName(adbDevice)} detectado"
-            deviceStatusText.setTextColor(0xFF3399FF.toInt())
-            appendLog("Dispositivo: ${adbDevice.productName ?: adbDevice.deviceName}")
-            adbConnected = adbClient.connect()
-            if (adbConnected) {
-                appendLog("ADB conectado")
+            val usbManager = requireContext().getSystemService(Context.USB_SERVICE) as UsbManager
+            if (usbManager.hasPermission(adbDevice)) {
+                deviceStatusText.text = "${usbCore.getVendorName(adbDevice)} - permiso OK"
+                deviceStatusText.setTextColor(0xFF00FF41.toInt())
+                appendLog("Dispositivo: ${adbDevice.productName ?: adbDevice.deviceName}")
+                appendLog("Permiso USB ya concedido. Conectando...")
+                connectToDevice(adbDevice)
             } else {
-                appendLog("No se pudo establecer conexion ADB (puede requerir autorizacion)")
+                deviceStatusText.text = "${usbCore.getVendorName(adbDevice)} - sin permiso"
+                deviceStatusText.setTextColor(0xFFFFB000.toInt())
+                appendLog("Dispositivo detectado: ${adbDevice.productName ?: adbDevice.deviceName}")
+                appendLog("Solicitando permiso USB al usuario...")
+                pendingDevice = adbDevice
+                usbCore.requestPermission(adbDevice)
             }
         } else {
             deviceStatusText.text = "Desconectado"
             deviceStatusText.setTextColor(0xFFFF3333.toInt())
             adbConnected = false
+            pendingDevice = null
         }
     }
+
+    private suspend fun connectToDevice(device: UsbDevice) {
+        appendLog("Iniciando conexion ADB con ${device.productName ?: device.deviceName}...")
+        adbConnected = adbClient.connect()
+        if (adbConnected) {
+            appendLog("ADB conectado exitosamente")
+            deviceStatusText.text = "${usbCore.getVendorName(device)} - ADB OK"
+            deviceStatusText.setTextColor(0xFF3399FF.toInt())
+            // Obtener informacion basica del dispositivo
+            val info = adbClient.getDeviceInfo()
+            if (info.isNotEmpty()) {
+                appendLog("Modelo: ${info["model"] ?: "N/A"}")
+                appendLog("Android: ${info["android_version"] ?: "N/A"}")
+            }
+        } else {
+            appendLog("No se pudo establecer conexion ADB.")
+            appendLog("Posibles causas: dispositivo no autorizado, o requiere RSA")
+            deviceStatusText.text = "${usbCore.getVendorName(device)} - error conexion"
+            deviceStatusText.setTextColor(0xFFFF3333.toInt())
+        }
+    }
+
+    // ===================== COMANDOS ADB =====================
 
     private suspend fun runAdbCommand(command: String) {
         appendLog("adb $command")
 
         if (!adbConnected && command != "devices") {
+            // Intentar conectar primero
+            requestUsbPermission()
             val success = adbClient.connect()
             if (!success) {
-                appendLog("Error: No hay conexion ADB. Verifica el cable OTG.")
+                appendLog("Error: No hay conexion ADB. Verifica el permiso USB y el cable OTG.")
                 return
             }
             adbConnected = true

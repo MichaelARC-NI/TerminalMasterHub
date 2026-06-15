@@ -1,7 +1,12 @@
 package com.terminalmasterhub.ui.fastboot
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -17,23 +22,21 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.terminalmasterhub.R
 import com.terminalmasterhub.TerminalMasterHubApp
 import com.terminalmasterhub.core.adb.FastbootClient
-import com.terminalmasterhub.core.file.FileManager
+import com.terminalmasterhub.core.usb.UsbBroadcastReceiver
+import com.terminalmasterhub.core.usb.UsbManagerCore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Fragmento de Fastboot puro — sesión independiente solo para bootloader.
+ * Fragmento de Fastboot puro — sesion independiente solo para bootloader.
  *
- * Proporciona:
- * - Detección y conexión a dispositivos en modo fastboot
- * - Consola para comandos fastboot manuales
- * - Botones rápidos: devices, reboot, flash, oem, getvar
- * - Flasheo de imágenes de partición
- * - Desbloqueo de bootloader
- *
- * NOTA: ADB tiene su propio fragmento independiente (AdbConsoleFragment).
+ * Maneja el flujo completo de permisos USB:
+ * 1. Detecta dispositivos en modo fastboot
+ * 2. Solicita permiso al usuario via PendingIntent (FLAG_MUTABLE)
+ * 3. Espera la respuesta del BroadcastReceiver
+ * 4. Si concedido, inicia conexion Fastboot + consulta de variables
  */
 class FastbootFragment : Fragment() {
 
@@ -82,8 +85,6 @@ class FastbootFragment : Fragment() {
         btnDevices = view.findViewById(R.id.btnFastbootDevices)
         btnReboot = view.findViewById(R.id.btnFastbootReboot)
         btnFlash = view.findViewById(R.id.btnFastbootFlash)
-
-        // Nuevos botones
         btnGetvar = view.findViewById(R.id.btnFastbootGetvar)
         btnOem = view.findViewById(R.id.btnFastbootOem)
 
@@ -98,9 +99,16 @@ class FastbootFragment : Fragment() {
         lifecycleScope.launch { checkFastbootDevices() }
     }
 
+    override fun onPause() {
+        super.onPause()
+    }
+
     private fun setupListeners() {
         btnDevices.setOnClickListener {
-            lifecycleScope.launch { runFastbootCommand("devices") }
+            lifecycleScope.launch {
+                requestUsbPermission()
+                runFastbootCommand("devices")
+            }
         }
 
         btnReboot.setOnClickListener {
@@ -155,30 +163,66 @@ class FastbootFragment : Fragment() {
         return true
     }
 
+    // ===================== PERMISOS USB =====================
+
     private fun setupUsbReceiver() {
-        val filter = android.content.IntentFilter().apply {
-            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED)
-            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED)
+        val filter = IntentFilter().apply {
+            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+            addAction(UsbManagerCore.ACTION_USB_PERMISSION)
         }
-        requireContext().registerReceiver(usbReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        requireContext().registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
     }
 
-    private val usbReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+    private val usbReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
-                    appendLog("Dispositivo USB detectado. Verificando modo Fastboot...")
+                UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
+                    val device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                    appendLog("Dispositivo USB detectado: ${device?.productName ?: "Desconocido"}")
                     lifecycleScope.launch { checkFastbootDevices() }
                 }
-                android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED -> {
+
+                UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                     fastbootConnected = false
-                    deviceStatusText.text = "Ningún dispositivo conectado"
+                    deviceStatusText.text = "Ningun dispositivo conectado"
                     deviceStatusText.setTextColor(0xFFFF3333.toInt())
                     appendLog("Dispositivo USB desconectado")
+                }
+
+                UsbManagerCore.ACTION_USB_PERMISSION -> {
+                    val device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                    val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+                    if (granted && device != null) {
+                        appendLog("Permiso USB CONCEDIDO para: ${device.productName ?: device.deviceName}")
+                        deviceStatusText.text = "${usbCore.getVendorName(device)} (permiso OK)"
+                        deviceStatusText.setTextColor(0xFF00FF41.toInt())
+                        lifecycleScope.launch { connectToFastboot(device) }
+                    } else if (!granted) {
+                        appendLog("Permiso USB DENEGADO. No se puede acceder al dispositivo.")
+                        deviceStatusText.text = "Permiso denegado"
+                        deviceStatusText.setTextColor(0xFFFF3333.toInt())
+                    }
                 }
             }
         }
     }
+
+    private suspend fun requestUsbPermission() {
+        val devices = usbCore.getAttachedDevices()
+        val fastbootDevice = devices.values.firstOrNull { device ->
+            usbCore.isFastbootMode(device)
+        }
+        if (fastbootDevice != null) {
+            val usbManager = requireContext().getSystemService(Context.USB_SERVICE) as UsbManager
+            if (!usbManager.hasPermission(fastbootDevice)) {
+                appendLog("Solicitando permiso USB para: ${fastbootDevice.productName ?: fastbootDevice.deviceName}")
+                usbCore.requestPermission(fastbootDevice)
+            }
+        }
+    }
+
+    // ===================== DETECCION DE DISPOSITIVOS =====================
 
     private suspend fun checkFastbootDevices() {
         val devices = usbCore.getAttachedDevices()
@@ -187,34 +231,56 @@ class FastbootFragment : Fragment() {
         }
 
         if (fastbootDevice != null) {
-            deviceStatusText.text = "${usbCore.getVendorName(fastbootDevice)} - Fastboot"
-            deviceStatusText.setTextColor(0xFF00FF41.toInt())
-            appendLog("Dispositivo Fastboot detectado: ${fastbootDevice.productName ?: "Desconocido"}")
-            fastbootConnected = fastbootClient.connect()
-            if (fastbootConnected) {
-                appendLog("✅ Fastboot conectado")
-                // Mostrar info básica
-                val info = fastbootClient.getDeviceInfo()
-                appendLog("Producto: ${info["product"] ?: "N/A"}")
-                appendLog("Bootloader: ${info["version-bootloader"] ?: "N/A"}")
+            val usbManager = requireContext().getSystemService(Context.USB_SERVICE) as UsbManager
+            if (usbManager.hasPermission(fastbootDevice)) {
+                deviceStatusText.text = "${usbCore.getVendorName(fastbootDevice)} - permiso OK"
+                deviceStatusText.setTextColor(0xFF00FF41.toInt())
+                appendLog("Dispositivo Fastboot: ${fastbootDevice.productName ?: fastbootDevice.deviceName}")
+                appendLog("Permiso USB ya concedido. Conectando...")
+                connectToFastboot(fastbootDevice)
             } else {
-                appendLog("⚠️  No se pudo conectar en modo Fastboot")
+                deviceStatusText.text = "${usbCore.getVendorName(fastbootDevice)} - sin permiso"
+                deviceStatusText.setTextColor(0xFFFFB000.toInt())
+                appendLog("Dispositivo Fastboot detectado: ${fastbootDevice.productName ?: fastbootDevice.deviceName}")
+                appendLog("Solicitando permiso USB al usuario...")
+                usbCore.requestPermission(fastbootDevice)
             }
         } else {
-            deviceStatusText.text = "Ningún dispositivo conectado"
+            deviceStatusText.text = "Ningun dispositivo conectado"
             deviceStatusText.setTextColor(0xFFFF3333.toInt())
             fastbootConnected = false
         }
     }
 
+    private suspend fun connectToFastboot(device: UsbDevice) {
+        appendLog("Iniciando conexion Fastboot con ${device.productName ?: device.deviceName}...")
+        fastbootConnected = fastbootClient.connect()
+        if (fastbootConnected) {
+            appendLog("Fastboot conectado exitosamente")
+            deviceStatusText.text = "${usbCore.getVendorName(device)} - Fastboot OK"
+            deviceStatusText.setTextColor(0xFF00FF41.toInt())
+            // Mostrar info basica del dispositivo
+            val info = fastbootClient.getDeviceInfo()
+            appendLog("Producto: ${info["product"] ?: "N/A"}")
+            appendLog("Bootloader: ${info["version-bootloader"] ?: "N/A"}")
+        } else {
+            appendLog("No se pudo conectar en modo Fastboot.")
+            deviceStatusText.text = "${usbCore.getVendorName(device)} - error conexion"
+            deviceStatusText.setTextColor(0xFFFF3333.toInt())
+        }
+    }
+
+    // ===================== COMANDOS FASTBOOT =====================
+
     private suspend fun runFastbootCommand(command: String) {
         appendLog("fastboot $command")
 
         if (!fastbootConnected) {
+            requestUsbPermission()
             val success = fastbootClient.connect()
             if (!success) {
                 appendLog("Error: No hay dispositivo Fastboot conectado.")
-                appendLog("Verifica que el dispositivo esté en modo bootloader.")
+                appendLog("Verifica que el dispositivo este en modo bootloader.")
                 return
             }
             fastbootConnected = true
@@ -234,7 +300,7 @@ class FastbootFragment : Fragment() {
 
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Flashear imagen Fastboot")
-            .setMessage("Selecciona la partición y luego el archivo .img")
+            .setMessage("Selecciona la particion y luego el archivo .img")
             .setSingleChoiceItems(partitions, 0) { _, which ->
                 selectedPartition = partitions[which]
             }
@@ -265,9 +331,9 @@ class FastbootFragment : Fragment() {
 
             withContext(Dispatchers.Main) {
                 if (success) {
-                    appendLog("✅ Flasheo completado")
+                    appendLog("Flasheo completado")
                 } else {
-                    appendLog("❌ Error durante el flasheo")
+                    appendLog("Error durante el flasheo")
                 }
             }
         }
