@@ -293,9 +293,13 @@ class ProotManager(private val context: Context) {
             }
 
             // Crear directorios necesarios
-            for (dir in listOf("proc", "sys", "dev", "dev/pts", "tmp", "root", "home/user")) {
+            for (dir in listOf("proc", "sys", "dev", "dev/pts", "tmp", "root", "home/user", "run", "var/lock", "dev/shm")) {
                 File(ubuntuDir, dir).mkdirs()
             }
+
+            // Fijar permisos de ejecucion en binarios ELF y scripts
+            onProgress?.invoke("Configurando permisos de ejecucion...", 75)
+            fixRootfsPermissions(ubuntuDir)
 
             // Configurar resolv.conf y sources.list
             configureUbuntu(ubuntuDir)
@@ -369,6 +373,50 @@ class ProotManager(private val context: Context) {
             "deb http://ports.ubuntu.com/ubuntu-ports noble-security main restricted universe multiverse\n"
         )
         File(ubuntuDir, "etc/locale.gen").writeText("en_US.UTF-8 UTF-8\n")
+
+        // Ensure /tmp exists and has correct permissions
+        File(ubuntuDir, "tmp").mkdirs()
+        File(ubuntuDir, "dev/shm").mkdirs()
+        File(ubuntuDir, "run").mkdirs()
+        File(ubuntuDir, "var/lock").mkdirs()
+
+        // Set execute permissions on critical binaries in the rootfs
+        // (they may have been lost during extraction)
+        fixRootfsPermissions(ubuntuDir)
+    }
+
+    /**
+     * Recursively sets execute permission on ELF binaries and scripts in the rootfs.
+     * This is necessary because extraction via Commons Compress may not preserve
+     * executable bits, and Android's noexec mount prevents using chmod.
+     * PRoot needs the execute bit to be set even though the kernel blocks execve
+     * on noexec filesystems - PRoot uses ptrace to work around this.
+     */
+    private fun fixRootfsPermissions(ubuntuDir: File) {
+        val binDirs = listOf("bin", "sbin", "usr/bin", "usr/sbin", "usr/local/bin", "usr/local/sbin", "usr/libexec")
+        for (relDir in binDirs) {
+            val dir = File(ubuntuDir, relDir)
+            if (dir.exists() && dir.isDirectory) {
+                dir.listFiles()?.forEach { f ->
+                    if (f.isFile) {
+                        try {
+                            // Check if it's an ELF binary or script (starts with ELF or #!)
+                            val fis = java.io.FileInputStream(f)
+                            val magic = ByteArray(4)
+                            fis.read(magic)
+                            fis.close()
+                            if (magic[0] == 0x7f && magic[1] == 0x45 && magic[2] == 0x4c && magic[3] == 0x46) {
+                                // ELF binary
+                                f.setExecutable(true, false)
+                            } else if (magic[0] == '#'.code.toByte() && magic[1] == '!'.code.toByte()) {
+                                // Script with shebang
+                                f.setExecutable(true, false)
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+        }
     }
 
     private suspend fun runInitialSetup(ubuntuDir: String) {
@@ -408,11 +456,15 @@ class ProotManager(private val context: Context) {
                 val ubuntuDir = getUbuntuDir().absolutePath
                 val homeDir = "$ubuntuDir/root"
                 val linkerPath = "/system/bin/linker64"
+                val tmpDir = "$ubuntuDir/tmp"
 
-                // LD_LIBRARY_PATH debe incluir el directorio de proot para libtalloc y libandroid-shmem
+                // LD_LIBRARY_PATH: librerias de PRoot (libtalloc, libandroid-shmem)
                 val ldLibPath = "$prootDir:/system/lib64:/vendor/lib64"
+                // PROOT_TMP_DIR: PRoot necesita un directorio temporal escribible
+                val prootTmpDir = tmpDir
 
                 val prootCmd = buildString {
+                    append("PROOT_TMP_DIR=$prootTmpDir ")
                     append("LD_LIBRARY_PATH=$ldLibPath ")
                     append(linkerPath)
                     append(" $prootBin")
@@ -421,7 +473,6 @@ class ProotManager(private val context: Context) {
                     append(" -b /dev")
                     append(" -b /proc")
                     append(" -b /sys")
-                    append(" -b /data")
                     append(" -b /storage")
                     append(" -b /dev/pts")
                     append(" -w ${workDir ?: homeDir}")
@@ -431,6 +482,7 @@ class ProotManager(private val context: Context) {
                     append(" LANG=en_US.UTF-8")
                     append(" LC_ALL=C")
                     append(" TERM=xterm-256color")
+                    append(" PROOT_TMP_DIR=$prootTmpDir")
                     append(" /bin/bash -c '${command.replace("'", "'\\''")}'")
                 }
 
@@ -450,20 +502,21 @@ class ProotManager(private val context: Context) {
         val prootDir = getProotBaseDir().absolutePath
         val ubuntuDir = getUbuntuDir().absolutePath
         val ldLibPath = "$prootDir:/system/lib64:/vendor/lib64"
+        val tmpDir = "$ubuntuDir/tmp"
 
         return buildString {
-            append("exec env LD_LIBRARY_PATH=$ldLibPath /system/bin/linker64 $prootBin")
+            append("exec env PROOT_TMP_DIR=$tmpDir LD_LIBRARY_PATH=$ldLibPath /system/bin/linker64 $prootBin")
             append(" -r $ubuntuDir")
             append(" -b /system")
             append(" -b /dev")
             append(" -b /proc")
             append(" -b /sys")
-            append(" -b /data")
             append(" -b /storage")
             append(" -b /dev/pts")
             append(" -w /root")
             append(" /usr/bin/env")
             append(" HOME=/root")
+            append(" PROOT_TMP_DIR=$tmpDir")
             append(" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
             append(" LANG=en_US.UTF-8")
             append(" LC_ALL=C")
