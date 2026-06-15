@@ -7,7 +7,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Puente Python para Terminal Master Hub v1.3.4.
+ * Puente Python para Terminal Master Hub v1.3.5.
  *
  * Ejecuta scripts Python usando:
  * 1. El intérprete del bootstrap ($PREFIX/bin/python3) primero
@@ -282,7 +282,7 @@ img {
     <p>Renderizado grafico | ${if (sourceScript != null) "Script ejecutado" else "Salida de consola"}</p>
 </div>
 <div class="output">$escapedContent</div>
-<div class="footer">Terminal Master Hub v1.3.4 — by Michael Antonio Rodriguez Condega</div>
+<div class="footer">Terminal Master Hub v1.3.5 — by Michael Antonio Rodriguez Condega</div>
 </body>
 </html>
 """.trimIndent()

@@ -1,6 +1,7 @@
 package com.terminalmasterhub.core.root
 
 import android.content.Context
+import com.terminalmasterhub.core.proot.ProotManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -189,8 +190,9 @@ class BootstrapManager(private val context: Context) {
             onProgress?.invoke("Instalando paquetes Python con pip...", 58)
             try {
                 val pipTarget = pythonSitePackages.absolutePath
-                val pipCmd = "pip3 install --target=\"$pipTarget\" -r \"$prefixPath/etc/requirements.txt\" 2>&1 || " +
-                        "python3 -m pip install --target=\"$pipTarget\" -r \"$prefixPath/etc/requirements.txt\" 2>&1 || " +
+                // Usar sh para evitar noexec en Android 14+
+                val pipCmd = "sh $prefixPath/bin/pip3 install --target=\"$pipTarget\" -r \"$prefixPath/etc/requirements.txt\" 2>&1 || " +
+                        "sh $prefixPath/bin/python3 -m pip install --target=\"$pipTarget\" -r \"$prefixPath/etc/requirements.txt\" 2>&1 || " +
                         "echo '[pip] No disponible - instala Python3 con apt update && apt install python3 python3-pip'"
                 val pb = ProcessBuilder("sh", "-c", pipCmd)
                 pb.environment().putAll(mapOf(
@@ -324,7 +326,7 @@ fi
 # BIENVENIDA
 # ============================================================================
 echo ""
-echo "  Terminal Master Hub v1.3.4 — by Michael Antonio Rodriguez Condega"
+echo "  Terminal Master Hub v1.3.5 — by Michael Antonio Rodriguez Condega"
 echo "  GitHub: MichaelARC-NI | Telegram: t.me/Michael_Antonio_Rodriguez"
 echo "  Escribe 'help' para comandos disponibles"
 echo ""
@@ -340,7 +342,7 @@ echo ""
 
             // Crear script init.sh para fuentear variables
             val initContent = """#!/system/bin/sh
-# Terminal Master Hub - Init script v1.3.4
+# Terminal Master Hub - Init script v1.3.5
 export PREFIX=$prefixPath
 export HOME=$homePath
 export PATH=$prefixPath/bin:/system/bin:/system/xbin
@@ -377,7 +379,7 @@ exec ${'$'}PREFIX/bin/bash
         val h = "$p/$HOME_DIR"
         val py = "$p/lib/python3/site-packages"
         return """#!/system/bin/sh
-# Terminal Master Hub - Init script v1.3.4
+# Terminal Master Hub - Init script v1.3.5
 export PREFIX=$p
 export HOME=$h
 export PATH=$p/bin:/system/bin:/system/xbin
@@ -394,10 +396,22 @@ exec ${'$'}PREFIX/bin/bash
     }
 
     /** Ejecuta un comando dentro del entorno PREFIX con todas las variables */
-    suspend fun executeInBootstrap(command: String): String = withContext(Dispatchers.IO) {
+    suspend fun executeInBootstrap(command: String, useProot: Boolean = false): String = withContext(Dispatchers.IO) {
         val p = getPrefixDir().absolutePath
         val h = "$p/$HOME_DIR"
         val py = "$p/lib/python3/site-packages"
+
+        // Intentar usar PRoot/Ubuntu si esta disponible y se solicita
+        if (useProot) {
+            try {
+                val pm = ProotManager(context)
+                if (pm.isProotAvailable() && pm.isUbuntuInstalled()) {
+                    val result = pm.executeInProot(command, h)
+                    return result
+                }
+            } catch (_: Exception) {}
+        }
+
         val env = mapOf(
             "PREFIX" to p,
             "HOME" to h,
@@ -408,13 +422,30 @@ exec ${'$'}PREFIX/bin/bash
             "PYTHONPATH" to py
         )
         try {
-            val pb = ProcessBuilder("sh", "-c", command)
+            // En Android 14+, los archivos en /data/data/ no pueden ejecutarse
+            // directamente debido a noexec. Usamos 'sh' para ejecutar wrappers.
+            val resolvedCmd = resolveCommand(command, p)
+            val pb = ProcessBuilder("sh", "-c", resolvedCmd)
             pb.environment().putAll(env)
             pb.directory(File(h))
             pb.redirectErrorStream(true)
             val proc = pb.start()
             proc.inputStream.bufferedReader().readText().trim()
         } catch (e: Exception) { "Error: ${e.message}" }
+    }
+
+    /**
+     * Resuelve un comando para manejar restricciones noexec en Android 14+.
+     * Si el comando es un wrapper en \$PREFIX/bin/, lo ejecuta via 'sh'.
+     */
+    private fun resolveCommand(cmd: String, prefixPath: String): String {
+        val firstWord = cmd.split("\s+".toRegex()).firstOrNull() ?: return cmd
+        val wrapper = File("$prefixPath/bin/$firstWord")
+        if (wrapper.exists() && !wrapper.canExecute()) {
+            // Wrapper existe pero no es ejecutable -> ejecutar via sh
+            return cmd.replaceFirst(firstWord, "sh ${wrapper.absolutePath}")
+        }
+        return cmd
     }
 
     fun uninstall(): Boolean = getPrefixDir().let { if (it.exists()) it.deleteRecursively() else true }
