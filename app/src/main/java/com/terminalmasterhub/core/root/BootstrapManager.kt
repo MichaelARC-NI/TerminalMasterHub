@@ -190,9 +190,10 @@ class BootstrapManager(private val context: Context) {
             onProgress?.invoke("Instalando paquetes Python con pip...", 58)
             try {
                 val pipTarget = pythonSitePackages.absolutePath
-                // Usar sh para evitar noexec en Android 14+
-                val pipCmd = "sh $prefixPath/bin/pip3 install --target=\"$pipTarget\" -r \"$prefixPath/etc/requirements.txt\" 2>&1 || " +
-                        "sh $prefixPath/bin/python3 -m pip install --target=\"$pipTarget\" -r \"$prefixPath/etc/requirements.txt\" 2>&1 || " +
+                // Usar env con PATH para ejecutar pip directamente (evita noexec)
+                val pipEnv = "env PATH=$prefixPath/bin:/system/bin:/system/xbin PREFIX=$prefixPath HOME=$homePath PYTHONPATH=$pipTarget"
+                val pipCmd = "$pipEnv pip3 install --target=\"$pipTarget\" -r \"$prefixPath/etc/requirements.txt\" 2>&1 || " +
+                        "$pipEnv python3 -m pip install --target=\"$pipTarget\" -r \"$prefixPath/etc/requirements.txt\" 2>&1 || " +
                         "echo '[pip] No disponible - instala Python3 con apt update && apt install python3 python3-pip'"
                 val pb = ProcessBuilder("sh", "-c", pipCmd)
                 pb.environment().putAll(mapOf(
@@ -340,24 +341,18 @@ echo ""
                 File(prefixPath, "bin/$pkg").exists()
             }
 
-            // Crear script init.sh para fuentear variables
-            val initContent = """#!/system/bin/sh
-# Terminal Master Hub - Init script v1.3.5
-export PREFIX=$prefixPath
-export HOME=$homePath
-export PATH=$prefixPath/bin:/system/bin:/system/xbin
-export TMPDIR=$prefixPath/tmp
-export PYTHONPATH=$prefixPath/lib/python3/site-packages:${'$'}PYTHONPATH
-export LANG=en_US.UTF-8
-export LC_ALL=C
-cd ${'$'}HOME
-if [ -f "${'$'}HOME/.bashrc" ]; then
-    . "${'$'}HOME/.bashrc"
-fi
-exec ${'$'}PREFIX/bin/bash
+            // Archivo de configuracion de entorno (no ejecutable, cargado por env)
+            val initContent = """# Terminal Master Hub - Init configuration
+# Cargado automaticamente, no requiere permisos de ejecucion
+PREFIX=$prefixPath
+HOME=$homePath
+PATH=$prefixPath/bin:/system/bin:/system/xbin
+TMPDIR=$prefixPath/tmp
+PYTHONPATH=$prefixPath/lib/python3/site-packages
+LANG=en_US.UTF-8
+LC_ALL=C
 """
-            File(prefix, "etc/init.sh").writeText(initContent)
-            File(prefix, "etc/init.sh").setExecutable(true)
+            File(prefix, "etc/environment.conf").writeText(initContent)
 
             onProgress?.invoke("Completado!", 100)
             BootstrapStatus(
@@ -422,9 +417,10 @@ exec ${'$'}PREFIX/bin/bash
             "PYTHONPATH" to py
         )
         try {
-            // En Android 14+, los archivos en /data/data/ no pueden ejecutarse
-            // directamente debido a noexec. Usamos 'sh' para ejecutar wrappers.
-            val resolvedCmd = resolveCommand(command, p)
+            // En Android 14+, noexec impide ejecutar archivos en /data/data/.
+            // Usamos 'env' con PATH completo para ejecutar comandos del sistema.
+            val envPrefix = "env PREFIX=$p HOME=$h PATH=$p/bin:/system/bin:/system/xbin LANG=en_US.UTF-8 LC_ALL=C PYTHONPATH=$py"
+            val resolvedCmd = "$envPrefix $command"
             val pb = ProcessBuilder("sh", "-c", resolvedCmd)
             pb.environment().putAll(env)
             pb.directory(File(h))
@@ -434,19 +430,6 @@ exec ${'$'}PREFIX/bin/bash
         } catch (e: Exception) { "Error: ${e.message}" }
     }
 
-    /**
-     * Resuelve un comando para manejar restricciones noexec en Android 14+.
-     * Si el comando es un wrapper en \$PREFIX/bin/, lo ejecuta via 'sh'.
-     */
-    private fun resolveCommand(cmd: String, prefixPath: String): String {
-        val firstWord = cmd.split(Regex("\\s+")).firstOrNull() ?: return cmd
-        val wrapper = File("$prefixPath/bin/$firstWord")
-        if (wrapper.exists() && !wrapper.canExecute()) {
-            // Wrapper existe pero no es ejecutable -> ejecutar via sh
-            return cmd.replaceFirst(firstWord, "sh ${wrapper.absolutePath}")
-        }
-        return cmd
-    }
 
     fun uninstall(): Boolean = getPrefixDir().let { if (it.exists()) it.deleteRecursively() else true }
 

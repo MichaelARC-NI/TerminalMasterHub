@@ -111,7 +111,7 @@ class TerminalFragment : Fragment() {
         val bootstrapBadge = if (bootstrapManager.isInstalled()) " [LINUX]" else ""
 
         val welcome = """
-Terminal Master Hub v1.3.9
+Terminal Master Hub v1.4.0
 Terminal Linux + Python IDE + Root Tools
 by $DEV_NAME
 
@@ -221,7 +221,7 @@ Comandos:
         val about = """
 $DEV_NAME
 
-Terminal Master Hub v1.3.9
+Terminal Master Hub v1.4.0
 
 App Android todo-en-uno:
 ✓ Terminal Linux (sin root)
@@ -313,7 +313,7 @@ App Android todo-en-uno:
 
         // Verificar assets y conectividad
         val hasAssets = try {
-            requireContext().assets.open("ubuntu/ubuntu-rootfs.tar.gz").use { true }
+            requireContext().assets.open("ubuntu/ubuntu_rootfs").use { true }
         } catch (e: Exception) { false }
 
         if (hasAssets) {
@@ -329,7 +329,7 @@ App Android todo-en-uno:
                 appendOutput("")
                 appendOutput("   O instala manualmente copiando los archivos:")
                 appendOutput("   1. Descarga ubuntu-base-24.04.4-base-arm64.tar.gz")
-                appendOutput("   2. Colocalo en: /sdcard/ubuntu-rootfs.tar.gz")
+                appendOutput("   2. Colocalo en: /sdcard/ubuntu_rootfs")
                 appendOutput("   3. Reintenta el comando")
                 return
             }
@@ -583,10 +583,11 @@ App Android todo-en-uno:
             val prefixPath = bootstrapManager.getPrefixDir().absolutePath
             val homePath = "$prefixPath/${BootstrapManager.HOME_DIR}"
 
-            // En Android 14+, los archivos en /data/data/ no son ejecutables
-            // debido a noexec. Verificamos si el comando usa un wrapper
-            // y si es asi, lo ejecutamos via 'sh' explicitamente.
-            val resolvedCmd = resolveShellCommand(cmd, prefixPath)
+            // En Android 14+, los archivos en /data/data/ no son ejecutables (noexec).
+            // No usamos wrapper scripts. En su lugar, usamos 'env' con las variables
+            // de entorno para ejecutar los comandos del sistema directamente.
+            val envPrefix = "env PREFIX=$prefixPath HOME=$homePath PATH=$prefixPath/bin:/system/bin:/system/xbin LANG=en_US.UTF-8 LC_ALL=C PYTHONPATH=$prefixPath/lib/python3/site-packages"
+            val resolvedCmd = "$envPrefix $cmd"
 
             val envMap = mapOf(
                 "PREFIX" to prefixPath,
@@ -614,19 +615,7 @@ App Android todo-en-uno:
         }
     }
 
-    /**
-     * Resuelve el comando shell para manejar noexec en Android 14+.
-     * Si el primer token coincide con un wrapper en \$PREFIX/bin/,
-     * antepone 'sh' para ejecutarlo como script.
-     */
-    private fun resolveShellCommand(cmd: String, prefixPath: String): String {
-        val firstWord = cmd.split("\\s+".toRegex()).firstOrNull() ?: return cmd
-        val wrapper = File("$prefixPath/bin/$firstWord")
-        if (wrapper.exists() && !wrapper.canExecute()) {
-            return cmd.replaceFirst(firstWord, "sh ${wrapper.absolutePath}")
-        }
-        return cmd
-    }
+
 
     private fun appendOutput(text: String, isInput: Boolean = false, isWelcome: Boolean = false) {
         requireActivity().runOnUiThread {
