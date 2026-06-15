@@ -111,7 +111,7 @@ class TerminalFragment : Fragment() {
         val bootstrapBadge = if (bootstrapManager.isInstalled()) " [LINUX]" else ""
 
         val welcome = """
-Terminal Master Hub v1.3.5
+Terminal Master Hub v1.3.6
 Terminal Linux + Python IDE + Root Tools
 by $DEV_NAME
 
@@ -221,7 +221,7 @@ Comandos:
         val about = """
 $DEV_NAME
 
-Terminal Master Hub v1.3.5
+Terminal Master Hub v1.3.6
 
 App Android todo-en-uno:
 ✓ Terminal Linux (sin root)
@@ -307,39 +307,43 @@ App Android todo-en-uno:
     private suspend fun handleProotInstall() {
         appendOutput("=== Instalando PRoot + Ubuntu ARM64 ===")
         appendOutput("")
-        appendOutput("Esto descargara e instalara un entorno Ubuntu 24.04")
-        appendOutput("completo para ARM64 usando PRoot (sin necesidad de root).")
+        appendOutput("Entorno Ubuntu 24.04 completo para ARM64 usando PRoot.")
         appendOutput("Basado en el enfoque de Termux y Kali NetHunter.")
+        appendOutput("PRoot y Ubuntu rootfs vienen EMBEBIDOS en la aplicacion.")
         appendOutput("")
 
-        if (!prootManager.isNetworkAvailable()) {
-            appendOutput("Error: No hay conexion a internet")
-            appendOutput("  Se necesita internet para descargar PRoot y Ubuntu")
-            return
-        }
+        // Verificar si los assets existen
+        val hasAssets = try {
+            requireContext().assets.open("ubuntu/ubuntu-rootfs.tar.gz").use { true }
+        } catch (e: Exception) { false }
 
-        appendOutput("Paso 1/2: Descargando e instalando PRoot...")
-        appendOutput("  (Binario de Termux para ARM64)")
+        if (!hasAssets) {
+            appendOutput("Nota: Assets embebidos no encontrados.")
+            appendOutput("Se descargaran desde internet (~30MB).")
+            if (!prootManager.isNetworkAvailable()) {
+                appendOutput("ERROR: No hay conexion a internet y no hay assets.")
+                appendOutput("Reinstala la aplicacion desde GitHub Releases.")
+                return
+            }
+        } else {
+            appendOutput("✅ Assets embebidos encontrados! No se necesita descarga.")
+        }
+        appendOutput("")
+
         prootManager.onProgress = { msg, pct ->
             appendOutput("  [$pct%] $msg")
         }
-        val prootOk = prootManager.installProot()
-        if (!prootOk) {
-            appendOutput("  Error: No se pudo instalar PRoot")
-            appendOutput("  Verifica tu conexion a internet y reintenta")
-            appendOutput("  Compatible solo con ARM64 (aarch64)")
+
+        // Instalar PRoot + Ubuntu (extrae desde assets o descarga)
+        val ok = prootManager.installAll()
+        if (!ok) {
+            appendOutput("")
+            appendOutput("❌ Error durante la instalacion.")
+            appendOutput("  Verifica que tu dispositivo sea ARM64 (aarch64)")
+            appendOutput("  y que tengas al menos 200MB de espacio libre.")
             return
         }
-        appendOutput("  PRoot instalado correctamente!")
-        appendOutput("")
-        appendOutput("Paso 2/2: Descargando Ubuntu 24.04 ARM64 rootfs (~30MB)...")
-        appendOutput("  Esto puede tomar varios minutos segun tu conexion.")
-        val ubuntuOk = prootManager.installUbuntuRootfs()
-        if (!ubuntuOk) {
-            appendOutput("  Error: No se pudo instalar Ubuntu rootfs")
-            return
-        }
-        appendOutput("  Ubuntu ARM64 instalado y configurado!")
+
         appendOutput("")
         appendOutput("✅ Instalacion completada exitosamente!")
         appendOutput("")
@@ -503,7 +507,8 @@ App Android todo-en-uno:
             cmd == "clear" -> withContext(Dispatchers.Main) { terminalOutput.text = ""; printWelcome() }
             cmd == "help" -> printWelcome()
             cmd == "root" || cmd == "su" -> showRootStatus()
-            cmd == "linux" || cmd == "bootstrap" -> handleLinuxSetup(cmd)
+            cmd.startsWith("linux") || cmd.startsWith("bootstrap") -> handleLinuxSetup(cmd)
+            cmd.startsWith("ubuntu") && cmd.contains("install") -> handleLinuxSetup(cmd)
             cmd.startsWith("ubuntu") || cmd.startsWith("proot") -> handleProotSetup()
             cmd == "mode ubuntu" || cmd == "mode proot" -> { useProotMode = true; appendOutput("Modo Ubuntu ARM64 activado. Los comandos se ejecutaran dentro de PRoot.") }
             cmd == "mode local" || cmd == "mode bootstrap" -> { useProotMode = false; appendOutput("Modo Bootstrap local activado.") }
@@ -522,7 +527,7 @@ App Android todo-en-uno:
                 if (file.name.endsWith(".py")) runPythonFile(path)
                 else runShell("sh \"$path\"")
             }
-            cmd == "apt" || cmd == "apt-get" -> {
+            cmd == "apt" || cmd.startsWith("apt ") || cmd == "apt-get" || cmd.startsWith("apt-get ") -> {
                 appendOutput("Usa: apt update, apt install <paquete>")
                 appendOutput("Si estas en modo local, primero instala Ubuntu:")
                 appendOutput("  bootstrap proot install")
