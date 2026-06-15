@@ -108,7 +108,7 @@ class TerminalFragment : Fragment() {
         val bootstrapBadge = if (bootstrapManager.isInstalled()) " [LINUX]" else ""
 
         val welcome = """
-Terminal Master Hub v1.3.2
+Terminal Master Hub v1.3.3
 Terminal Linux + Python IDE + Root Tools
 by $DEV_NAME
 
@@ -185,7 +185,7 @@ Comandos:
         val about = """
 $DEV_NAME
 
-Terminal Master Hub v1.3.2
+Terminal Master Hub v1.3.3
 
 App Android todo-en-uno:
 ✓ Terminal Linux (sin root)
@@ -449,9 +449,22 @@ App Android todo-en-uno:
 
     private suspend fun runShell(cmd: String) {
         try {
-            val process = ProcessBuilder("sh", "-c", cmd)
-                .directory(File(FileManager.getStoragePath()))
-                .redirectErrorStream(true).start()
+            // Inyectar entorno PREFIX con HOME, PATH y locale
+            val prefixPath = bootstrapManager.getPrefixDir().absolutePath
+            val homePath = "$prefixPath/${BootstrapManager.HOME_DIR}"
+            val envMap = mapOf(
+                "PREFIX" to prefixPath,
+                "HOME" to homePath,
+                "PATH" to "$prefixPath/bin:/system/bin:/system/xbin",
+                "TMPDIR" to "$prefixPath/tmp",
+                "LANG" to "en_US.UTF-8",
+                "LC_ALL" to "C"
+            )
+            val pb = ProcessBuilder("sh", "-c", cmd)
+            pb.environment().putAll(envMap)
+            pb.directory(File(FileManager.getStoragePath()))
+            pb.redirectErrorStream(true)
+            val process = pb.start()
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val output = StringBuilder()
             var line: String?
