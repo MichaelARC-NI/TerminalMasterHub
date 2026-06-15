@@ -25,13 +25,21 @@ Desarrollada por **Michael Antonio Rodriguez Condega** — *Ingeniero de Softwar
 - **Historial de comandos** navegable con flechas
 - **Detección de root** multinivel compatible con Magisk, KernelSU, APatch y SuperSU
 
-### 🔌 Sesión 2 — ADB/Fastboot Universal
+### 🔌 Sesión 2 — USB Tools (ADB + Fastboot)
+
+#### 📱 Sub-sesión 2A — ADB Shell Interactivo
 - **Consola ADB nativa** sobre USB OTG sin dependencias externas
-- **Cliente Fastboot completo**: ejecuta comandos como `devices`, `flash`, `reboot`, `oem`, `getvar`
-- Compatible con: **Xiaomi, POCO, Redmi, Samsung, Motorola, Google Pixel, OnePlus, Oppo, Huawei, LG, Sony, ASUS, HTC, Lenovo, ZTE** y más
+- Comandos: `adb devices`, `adb shell`, `adb push`, `adb pull`
+- **Shell interactivo**: ejecuta comandos bash directamente en el dispositivo conectado
+- **Transferencia de archivos**: envía y recibe archivos entre dispositivos
+- Depuración remota y acceso a sistema de archivos del dispositivo
+
+#### ⚡ Sub-sesión 2B — Fastboot (Bootloader & Flasheo)
+- **Cliente Fastboot completo**: `devices`, `flash`, `reboot`, `oem`, `getvar`
+- **Botones rápidos**: devices, getvar, flash, oem unlock/lock, reboot (con opciones)
 - **Flasheo de particiones** con transferencia optimizada (chunks de 1 MB)
-- **Desbloqueo de bootloader** soportado
-- **Empuje y extracción de archivos** vía ADB
+- **Desbloqueo de bootloader** (`flashing unlock`, `oem unlock`)
+- Compatible con: **Xiaomi, POCO, Redmi, Samsung, Motorola, Google Pixel, OnePlus, Oppo, Huawei, LG, Sony, ASUS, HTC, Lenovo, ZTE** y más
 
 ### 🇸🇲 Sesión 3 — Samsung Odin3
 - **Protocolo Odin3 nativo**: comunicación directa con Samsung en **Download Mode**
@@ -155,7 +163,7 @@ TerminalMasterHub/
 │   │   │   │   └── PermissionManager.kt      ← Gestión de permisos runtime
 │   │   │   ├── root/
 │   │   │   │   ├── RootChecker.kt            ← Detección de root nativa
-│   │   │   │   └── BootstrapManager.kt       ← Entorno Linux aislado
+│   │   │   │   └── BootstrapManager.kt       ← Entorno Linux PREFIX (usr/)
 │   │   │   └── usb/
 │   │   │       ├── UsbManagerCore.kt         ← Núcleo USB OTG
 │   │   │       ├── UsbBroadcastReceiver.kt   ← Receptor de eventos USB
