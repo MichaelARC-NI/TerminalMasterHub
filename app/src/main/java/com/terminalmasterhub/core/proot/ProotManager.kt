@@ -400,16 +400,14 @@ class ProotManager(private val context: Context) {
                 dir.listFiles()?.forEach { f ->
                     if (f.isFile) {
                         try {
-                            // Check if it's an ELF binary or script (starts with ELF or #!)
-                            val fis = java.io.FileInputStream(f)
+                            val stream = java.io.FileInputStream(f)
                             val magic = ByteArray(4)
-                            fis.read(magic)
-                            fis.close()
-                            if (magic[0] == 0x7f && magic[1] == 0x45 && magic[2] == 0x4c && magic[3] == 0x46) {
-                                // ELF binary
-                                f.setExecutable(true, false)
-                            } else if (magic[0] == '#'.code.toByte() && magic[1] == '!'.code.toByte()) {
-                                // Script with shebang
+                            stream.read(magic)
+                            stream.close()
+                            val isElf = magic[0].toInt() == 0x7f && magic[1].toInt() == 0x45 &&
+                                        magic[2].toInt() == 0x4c && magic[3].toInt() == 0x46
+                            val isScript = magic[0].toInt() == 0x23 && magic[1].toInt() == 0x21
+                            if (isElf || isScript) {
                                 f.setExecutable(true, false)
                             }
                         } catch (_: Exception) {}
