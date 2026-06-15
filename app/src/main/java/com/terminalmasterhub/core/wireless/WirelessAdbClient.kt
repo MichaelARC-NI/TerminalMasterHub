@@ -120,7 +120,7 @@ class WirelessAdbClient(private val context: Context) {
                 val codeBytes = code.toByteArray(Charsets.UTF_8)
                 val outStream = sslSocket.getOutputStream()
                 val lenBuffer = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
-                    .putInt(codeBytes.length).array()
+                    .putInt(codeBytes.size).array()
                 outStream.write(lenBuffer)
                 outStream.write(codeBytes)
                 outStream.flush()

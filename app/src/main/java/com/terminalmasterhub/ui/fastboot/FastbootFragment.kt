@@ -195,7 +195,7 @@ class FastbootFragment : Fragment() {
 
                     UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                         fastbootConnected = false
-                        withContext(Dispatchers.Main) {
+                        requireActivity().runOnUiThread {
                             deviceStatusText.text = "Desconectado"
                             deviceStatusText.setTextColor(0xFFFF3333.toInt())
                         }
@@ -207,14 +207,14 @@ class FastbootFragment : Fragment() {
                         val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
                         if (granted && device != null) {
                             appendLog("Permiso USB CONCEDIDO: ${device.productName ?: device.deviceName}")
-                            withContext(Dispatchers.Main) {
+                            requireActivity().runOnUiThread {
                                 deviceStatusText.text = "${usbCore.getVendorName(device)} (permiso OK)"
                                 deviceStatusText.setTextColor(0xFF00FF41.toInt())
                             }
                             lifecycleScope.launch(Dispatchers.IO) { connectToFastbootSafe(device) }
                         } else if (!granted) {
                             appendLog("Permiso USB DENEGADO")
-                            withContext(Dispatchers.Main) {
+                            requireActivity().runOnUiThread {
                                 deviceStatusText.text = "Permiso denegado"
                                 deviceStatusText.setTextColor(0xFFFF3333.toInt())
                             }
