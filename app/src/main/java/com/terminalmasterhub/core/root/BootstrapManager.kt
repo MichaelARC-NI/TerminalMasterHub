@@ -17,8 +17,6 @@ import java.io.File
  * 2. Solo creamos archivos de configuracion (.bashrc, etc.)
  * 3. Para ejecutar comandos Linux, usamos PRoot + Ubuntu rootfs via linker64
  * 4. PRoot se ejecuta con /system/bin/linker64 para evitar noexec
- *
- * Basado en el enfoque de Termux, Kali NetHunter y PRoot.
  */
 class BootstrapManager(private val context: Context) {
 
@@ -76,7 +74,6 @@ class BootstrapManager(private val context: Context) {
         if (!isInstalled()) {
             return BootstrapStatus(prefixPath = p, message = "No instalado")
         }
-        // Verificar si PRoot/Ubuntu esta instalado (ahi estan los binarios reales)
         val ubuntuOk = try {
             val pm = ProotManager(context)
             pm.isUbuntuInstalled()
@@ -104,11 +101,6 @@ class BootstrapManager(private val context: Context) {
         )
     }
 
-    /**
-     * Instala la estructura de directorios y archivos de configuracion.
-     * NO crea scripts ejecutables (no funcionan con noexec en Android 14+).
-     * Los binarios reales se instalan via PRoot + Ubuntu rootfs.
-     */
     suspend fun install(): BootstrapStatus = withContext(Dispatchers.IO) {
         try {
             val prefix = getPrefixDir()
@@ -126,13 +118,9 @@ class BootstrapManager(private val context: Context) {
             }
 
             onProgress?.invoke("Configurando scripts de entorno...", 30)
-            // En Android 14+, /data/data/ se monta con noexec.
-            // NO podemos crear scripts ejecutables en $PREFIX/bin/.
-            // Los alias en .bashrc apuntan directamente a linker64+PRoot
 
             val envContent = """
 # Terminal Master Hub - Environment Configuration
-# Cargado por env al inicio de la terminal
 PREFIX=$prefixPath
 HOME=$homePath
 PATH=/system/bin:/system/xbin
@@ -143,65 +131,59 @@ LC_ALL=C
             File(prefix, "etc/environment").writeText(envContent)
 
             onProgress?.invoke("Creando .bashrc...", 50)
+            // Construir .bashrc - los $ se escapan con un replace post-raw-string
             val bashrcContent = """
 # ============================================================================
 # Terminal Master Hub - .bashrc v1.4.1
 # ============================================================================
 
-# Alias basicos
 alias ll='ls -la'
 alias la='ls -A'
 alias l='ls -CF'
 alias ..='cd ..'
 alias ...='cd ../..'
 
-# Prompt profesional
-PS1='\033[1;32mTerminalMaster\033[0m:\033[1;34m\w\033[0m$ '
+# Prompt profesional con color
+PS1='\033[1;32mTerminalMaster\033[0m:\033[1;34m\w\033[0m\$ '
 
-# Configuracion de PATH del sistema
 export PATH=/system/bin:/system/xbin
 
 # Python startup
-export PYTHONSTARTUP=\$HOME/.pythonrc
-if [ ! -f \$HOME/.pythonrc ]; then
-    cat > \$HOME/.pythonrc << 'PYEOF'
-# Terminal Master Hub Python config
+export PYTHONSTARTUP=DOLLARHOME/.pythonrc
+if [ ! -f DOLLARHOME/.pythonrc ]; then
+    cat > DOLLARHOME/.pythonrc << 'PYEOF'
 import sys
 print(f"Python {sys.version.split()[0]} - Terminal Master Hub")
 PYEOF
 fi
 
 # ============================================================================
-# ALIAS PARA UBUNTU VIA PROOT+linker64
+# ALIAS PARA UBUNTU VIA PROOT+linker64 (noexec safe)
 # ============================================================================
-# En Android 14+, /data/data/ tiene noexec.
-# Ejecutamos binarios de Ubuntu via /system/bin/linker64 + PRoot
-# para evitar la restriccion.
-# ============================================================================
-PROOT_DIR="\$PREFIX/proot"
-PROOT_BIN="\$PROOT_DIR/proot-arm64"
-UBUNTU_DIR="\$PROOT_DIR/ubuntu"
-LINKER64="/system/bin/linker64"
+PROOT_DIR=DOLLARPREFIX/proot
+PROOT_BIN=DOLLARPROOT_DIR/proot-arm64
+UBUNTU_DIR=DOLLARPROOT_DIR/ubuntu
+LINKER64=/system/bin/linker64
 
-if [ -f "\$PROOT_BIN" ] && [ -d "\$UBUNTU_DIR/usr/bin" ]; then
-    PROOT_CMD="\$LINKER64 \$PROOT_BIN -r \$UBUNTU_DIR -b /system -b /dev -b /proc -b /sys -b /data -b /storage -b /dev/pts"
-    
-    alias python3='\$PROOT_CMD -w /root /usr/bin/python3'
+if [ -f DOLLARPROOT_BIN ] && [ -d DOLLARUBUNTU_DIR/usr/bin ]; then
+    PROOT_CMD=DOLLARLINKER64 DOLLARPROOT_BIN -r DOLLARUBUNTU_DIR -b /system -b /dev -b /proc -b /sys -b /data -b /storage -b /dev/pts
+
+    alias python3='DOLLARPROOT_CMD -w /root /usr/bin/python3'
     alias python=python3
-    alias pip3='\$PROOT_CMD -w /root /usr/bin/pip3'
+    alias pip3='DOLLARPROOT_CMD -w /root /usr/bin/pip3'
     alias pip=pip3
-    alias apt='\$PROOT_CMD -w /root /usr/bin/apt'
-    alias apt-get='\$PROOT_CMD -w /root /usr/bin/apt-get'
-    alias cmus='\$PROOT_CMD -w /root /usr/bin/cmus'
-    alias bash='\$PROOT_CMD -w /root /bin/bash --login'
-    alias tar='\$PROOT_CMD -w /root /usr/bin/tar'
-    alias zstd='\$PROOT_CMD -w /root /usr/bin/zstd'
-    alias 7z='\$PROOT_CMD -w /root /usr/bin/7z'
-    alias unzip='\$PROOT_CMD -w /root /usr/bin/unzip'
-    alias unrar='\$PROOT_CMD -w /root /usr/bin/unrar'
-    alias nano='\$PROOT_CMD -w /root /usr/bin/nano'
-    alias nvim='\$PROOT_CMD -w /root /usr/bin/nvim'
-    
+    alias apt='DOLLARPROOT_CMD -w /root /usr/bin/apt'
+    alias apt-get='DOLLARPROOT_CMD -w /root /usr/bin/apt-get'
+    alias cmus='DOLLARPROOT_CMD -w /root /usr/bin/cmus'
+    alias bash='DOLLARPROOT_CMD -w /root /bin/bash --login'
+    alias tar='DOLLARPROOT_CMD -w /root /usr/bin/tar'
+    alias zstd='DOLLARPROOT_CMD -w /root /usr/bin/zstd'
+    alias 7z='DOLLARPROOT_CMD -w /root /usr/bin/7z'
+    alias unzip='DOLLARPROOT_CMD -w /root /usr/bin/unzip'
+    alias unrar='DOLLARPROOT_CMD -w /root /usr/bin/unrar'
+    alias nano='DOLLARPROOT_CMD -w /root /usr/bin/nano'
+    alias nvim='DOLLARPROOT_CMD -w /root /usr/bin/nvim'
+
     echo ""
     echo "  Ubuntu 24.04 ARM64 listo via PRoot+linker64"
     echo "  Comandos: python3, apt, cmus, tar, nano, etc."
@@ -211,21 +193,18 @@ else
 fi
 
 # ============================================================================
-# BIENVENIDA (sin bordes ASCII)
-# ============================================================================
 echo ""
-echo "  Terminal Master Hub v1.4.1 — by Michael Antonio Rodriguez Condega"
+echo "  Terminal Master Hub v1.4.1 - by Michael Antonio Rodriguez Condega"
 echo "  GitHub: MichaelARC-NI | Telegram: t.me/Michael_Antonio_Rodriguez"
 echo "  Email: androidmovil@proton.me | FB: facebook.com/share/1D1pfVdbXE"
 echo "  Escribe 'help' para comandos disponibles"
 echo ""
 """.trimIndent()
+                .replace("DOLLAR", "\$")
 
             File(prefix, "home/.bashrc").writeText(bashrcContent + "\n")
 
-            // Archivo de configuracion de entorno (no ejecutable)
             val initContent = """# Terminal Master Hub - Init configuration
-# Cargado automaticamente, no requiere permisos de ejecucion
 PREFIX=$prefixPath
 HOME=$homePath
 PATH=/system/bin:/system/xbin
@@ -256,9 +235,6 @@ LC_ALL=C
         }
     }
 
-    /**
-     * Archivo de configuracion de entorno (usado por env desde la terminal).
-     */
     fun getInitConfig(): String = buildString {
         val p = getPrefixDir().absolutePath
         val h = "$p/$HOME_DIR"
@@ -273,16 +249,10 @@ LC_ALL=C
         appendLine("# Usa 'mode ubuntu' para activar PRoot/Ubuntu")
     }
 
-    /**
-     * Ejecuta un comando dentro del entorno PREFIX.
-     * Si useProot=true y PRoot+Ubuntu estan disponibles, usa PRoot.
-     * Si no, usa comandos del sistema via env.
-     */
     suspend fun executeInBootstrap(command: String, useProot: Boolean = false): String = withContext(Dispatchers.IO) {
         val p = getPrefixDir().absolutePath
         val h = "$p/$HOME_DIR"
 
-        // Intentar usar PRoot/Ubuntu si esta disponible y se solicita
         if (useProot) {
             try {
                 val pm = ProotManager(context)
@@ -294,8 +264,6 @@ LC_ALL=C
         }
 
         try {
-            // En Android 14+, noexec impide ejecutar archivos en /data/data/.
-            // Usamos env con PATH del sistema para comandos basicos.
             val envPrefix = "env PREFIX=$p HOME=$h PATH=/system/bin:/system/xbin LANG=en_US.UTF-8 LC_ALL=C"
             val resolvedCmd = "$envPrefix $command"
             val pb = ProcessBuilder("sh", "-c", resolvedCmd)
@@ -311,9 +279,6 @@ LC_ALL=C
         } catch (e: Exception) { "Error: ${e.message}" }
     }
 
-    /**
-     * Ejecuta un comando usando linker64 para evitar restriccion noexec.
-     */
     suspend fun executeWithLinker64(binaryPath: String, args: String = ""): String = withContext(Dispatchers.IO) {
         try {
             val file = File(binaryPath)
