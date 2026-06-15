@@ -12,7 +12,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Gestor de PRoot + Ubuntu ARM64 para Terminal Master Hub v1.3.7.
+ * Gestor de PRoot + Ubuntu ARM64 para Terminal Master Hub v1.3.8.
  *
  * Proporciona un entorno Linux completo (Ubuntu 24.04 ARM64)
  * usando PRoot para evitar necesidad de root.
@@ -38,6 +38,12 @@ class ProotManager(private val context: Context) {
         const val PROOT_ASSET = "ubuntu/proot-arm64"
 
         // URLs de descarga por si los assets no estan disponibles
+        // GitHub Release - fuente principal de descarga
+        const val GITHUB_RELEASE = "https://github.com/MichaelARC-NI/TerminalMasterHub/releases/download/v1.3.8"
+        const val GITHUB_ROOTFS_URL = "$GITHUB_RELEASE/ubuntu-base-24.04.4-base-arm64.tar.gz"
+        const val GITHUB_PROOT_URL = "$GITHUB_RELEASE/proot-arm64"
+
+        // Fuentes secundarias (fallback si GitHub no funciona)
         const val PROOT_DEB_URL = "https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.78-1_aarch64.deb"
         const val UBUNTU_ROOTFS_URL = "http://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz"
     }
@@ -405,52 +411,50 @@ class ProotManager(private val context: Context) {
         }
     }
 
-    /** Descarga PRoot desde multiples fuentes */
+    /** Descarga PRoot desde GitHub Release */
     private fun downloadProotWithFallback(targetDir: File): Boolean {
-        // Fuente 1: .deb de Termux
+        // Fuente 1: GitHub Release (mas confiable)
         try {
-            onProgress?.invoke("Descargando PRoot desde Termux...", 20)
+            onProgress?.invoke("Descargando PRoot desde GitHub...", 20)
+            val prootBin = getProotBinary()
+            downloadFile(GITHUB_PROOT_URL, prootBin)
+            if (prootBin.exists() && prootBin.length() > 10000) {
+                onProgress?.invoke("PRoot descargado de GitHub!", 30)
+                return true
+            }
+        } catch (e: Exception) {
+            onProgress?.invoke("GitHub no disponible: ${e.message}", 22)
+        }
+
+        // Fuente 2: .deb de Termux
+        try {
+            onProgress?.invoke("Descargando PRoot desde Termux...", 24)
             downloadAndExtractProot(targetDir)
             if (getProotBinary().exists()) return true
         } catch (e: Exception) {
-            onProgress?.invoke("Fallback 1 fallo: ${e.message}", 22)
-        }
-
-        // Fuente 2: Static binary de GitHub (fallback)
-        try {
-            onProgress?.invoke("Descargando PRoot desde GitHub...", 25)
-            val staticUrls = listOf(
-                "https://github.com/termux/proot/releases/download/v5.4.0/proot-arm64-v8a",
-                "https://raw.githubusercontent.com/termux/proot/master/proot-arm64"
-            )
-            for (url in staticUrls) {
-                try {
-                    val prootBin = getProotBinary()
-                    downloadFile(url, prootBin)
-                    if (prootBin.exists() && prootBin.length() > 1000) return true
-                } catch (_: Exception) {}
-            }
-        } catch (e: Exception) {
-            onProgress?.invoke("Fallback 2 fallo: ${e.message}", 28)
+            onProgress?.invoke("Termux fallo: ${e.message}", 26)
         }
 
         return false
     }
 
-    /** Descarga Ubuntu rootfs desde multiples mirrors */
+    /** Descarga Ubuntu rootfs desde GitHub Release */
     private fun downloadUbuntuWithFallback(targetDir: File): Boolean {
-        val urls = listOf(
-            "http://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz",
-            "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64-root.tar.xz",
-            "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz"
-        )
         val tarFile = File(getProotBaseDir(), "ubuntu-rootfs.tar.gz")
-
+        
+        // Intentar descarga desde el release de GitHub
+        val urls = listOf(
+            GITHUB_ROOTFS_URL,                          // 1. GitHub Release (principal)
+            UBUNTU_ROOTFS_URL,                           // 2. Ubuntu CD image
+            "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz" // 3. Version anterior
+        )
+        
         for (url in urls) {
             try {
-                onProgress?.invoke("Descargando desde: ${url.substringAfter("//").substringBefore("/")}...", 50)
+                val source = url.substringAfter("//").substringBefore("/").substringBefore(".")
+                onProgress?.invoke("Descargando desde $source...", 50)
                 downloadFile(url, tarFile)
-                if (tarFile.exists() && tarFile.length() > 1000000) { // > 1MB
+                if (tarFile.exists() && tarFile.length() > 1000000) {
                     onProgress?.invoke("Extrayendo rootfs...", 60)
                     val process = ProcessBuilder(
                         "sh", "-c",
@@ -461,7 +465,7 @@ class ProotManager(private val context: Context) {
                     if (File(targetDir, "etc/os-release").exists()) return true
                 }
             } catch (e: Exception) {
-                onProgress?.invoke("Mirror fallo, intentando siguiente...", 55)
+                onProgress?.invoke("Fallo, intentando siguiente mirror...", 55)
                 tarFile.delete()
             }
         }
@@ -573,14 +577,26 @@ fi
         }
     }
 
-    /** Verifica conexion a internet */
-    fun isNetworkAvailable(): Boolean = try {
-        val url = URL("https://google.com")
-        val conn = url.openConnection() as HttpURLConnection
-        conn.connectTimeout = 3000
-        conn.connect()
-        conn.responseCode == 200
-    } catch (e: Exception) { false }
+    /** Verifica conexion a internet probando multiples hosts */
+    fun isNetworkAvailable(): Boolean {
+        val hosts = listOf(
+            "https://google.com",
+            "https://github.com",
+            "https://cdimage.ubuntu.com",
+            "https://packages.termux.dev"
+        )
+        for (host in hosts) {
+            try {
+                val url = URL(host)
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 3000
+                conn.readTimeout = 3000
+                conn.connect()
+                if (conn.responseCode in 200..499) return true
+            } catch (_: Exception) {}
+        }
+        return false
+    }
 
     private fun getDirSize(dir: File): Long {
         var size = 0L
