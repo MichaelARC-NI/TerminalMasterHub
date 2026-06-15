@@ -134,7 +134,8 @@ LC_ALL=C
             // Construir .bashrc - los $ se escapan con un replace post-raw-string
             val bashrcContent = """
 # ============================================================================
-# Terminal Master Hub - .bashrc v1.4.1
+# Terminal Master Hub - .bashrc v1.5.0
+# Arquitectura DIRECTA: linker64 + ld-linux para binarios Ubuntu
 # ============================================================================
 
 alias ll='ls -la'
@@ -148,53 +149,50 @@ PS1='\033[1;32mTerminalMaster\033[0m:\033[1;34m\w\033[0m\$ '
 
 export PATH=/system/bin:/system/xbin
 
-# Python startup
-export PYTHONSTARTUP=DOLLARHOME/.pythonrc
-if [ ! -f DOLLARHOME/.pythonrc ]; then
-    cat > DOLLARHOME/.pythonrc << 'PYEOF'
-import sys
-print(f"Python {sys.version.split()[0]} - Terminal Master Hub")
-PYEOF
-fi
-
 # ============================================================================
-# ALIAS PARA UBUNTU VIA PROOT+linker64 (noexec safe)
+# CONFIGURACION DE UBUNTU VIA LINKER DIRECTO (v1.5.0)
 # ============================================================================
-PROOT_DIR=DOLLARPREFIX/proot
-PROOT_BIN=DOLLARPROOT_DIR/proot-arm64
-UBUNTU_DIR=DOLLARPROOT_DIR/ubuntu
-LINKER64=/system/bin/linker64
+# En lugar de PRoot, usamos el linker de Ubuntu (ld-linux-aarch64.so.1)
+# que es un binario ESTATICAMENTE enlazado (204KB, no necesita librerias).
+# 
+# linker64 -> ld-linux-aarch64.so.1 -> /usr/bin/bash -> apt, python3, etc.
+# ============================================================================
 
-if [ -f DOLLARPROOT_BIN ] && [ -d DOLLARUBUNTU_DIR/usr/bin ]; then
-    PROOT_CMD=DOLLARLINKER64 DOLLARPROOT_BIN -r DOLLARUBUNTU_DIR -b /system -b /dev -b /proc -b /sys -b /data -b /storage -b /dev/pts
+UBUNTU_DIR=DOLLARPREFIX/proot/ubuntu
+UBUNTU_LINKER=DOLLARUBUNTU_DIR/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
+UBUNTU_LIB=DOLLARUBUNTU_DIR/usr/lib/aarch64-linux-gnu
+ANDROID_LINKER=/system/bin/linker64
 
-    alias python3='DOLLARPROOT_CMD -w /root /usr/bin/python3'
-    alias python=python3
-    alias pip3='DOLLARPROOT_CMD -w /root /usr/bin/pip3'
-    alias pip=pip3
-    alias apt='DOLLARPROOT_CMD -w /root /usr/bin/apt'
-    alias apt-get='DOLLARPROOT_CMD -w /root /usr/bin/apt-get'
-    alias cmus='DOLLARPROOT_CMD -w /root /usr/bin/cmus'
-    alias bash='DOLLARPROOT_CMD -w /root /bin/bash --login'
-    alias tar='DOLLARPROOT_CMD -w /root /usr/bin/tar'
-    alias zstd='DOLLARPROOT_CMD -w /root /usr/bin/zstd'
-    alias 7z='DOLLARPROOT_CMD -w /root /usr/bin/7z'
-    alias unzip='DOLLARPROOT_CMD -w /root /usr/bin/unzip'
-    alias unrar='DOLLARPROOT_CMD -w /root /usr/bin/unrar'
-    alias nano='DOLLARPROOT_CMD -w /root /usr/bin/nano'
-    alias nvim='DOLLARPROOT_CMD -w /root /usr/bin/nvim'
-
-    echo ""
-    echo "  Ubuntu 24.04 ARM64 listo via PRoot+linker64"
-    echo "  Comandos: python3, apt, cmus, tar, nano, etc."
+if [ -f DOLLARUBUNTU_LINKER ] && [ -d DOLLARUBUNTU_DIR/etc ]; then
+    if [ -f DOLLARUBUNTU_DIR/bin/bash ]; then
+        # Alias directos para herramientas Ubuntu via linker
+        alias apt='DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/usr/bin/apt'
+        alias apt-get='DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/usr/bin/apt-get'
+        alias python3='DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/usr/bin/python3'
+        alias python=python3
+        alias pip3='DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/usr/bin/pip3'
+        alias pip=pip3
+        alias cmus='DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/usr/bin/cmus'
+        alias tar='DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/bin/tar'
+        alias bash='exec DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/bin/bash --login'
+        
+        echo ""
+        echo "  Ubuntu 24.04 ARM64 listo via linker directo!"
+        echo "  Comandos: apt, python3, cmus, pip, tar, bash"
+        echo "  Usa 'apt install <paquete>' para instalar mas herramientas"
+    else
+        echo ""
+        echo "  Ubuntu listo pero bash no instalado."
+        echo "  Usa: apt update && apt install bash python3 cmus"
+    fi
 else
     echo ""
-    echo "  PRoot/Ubuntu no instalado. Usa: bootstrap proot install"
+    echo "  Ubuntu no instalado. Usa: bootstrap proot install"
 fi
 
 # ============================================================================
 echo ""
-echo "  Terminal Master Hub v1.4.1 - by Michael Antonio Rodriguez Condega"
+echo "  Terminal Master Hub v1.5.0 - by Michael Antonio Rodriguez Condega"
 echo "  GitHub: MichaelARC-NI | Telegram: t.me/Michael_Antonio_Rodriguez"
 echo "  Email: androidmovil@proton.me | FB: facebook.com/share/1D1pfVdbXE"
 echo "  Escribe 'help' para comandos disponibles"

@@ -111,7 +111,7 @@ class TerminalFragment : Fragment() {
         val bootstrapBadge = if (bootstrapManager.isInstalled()) " [LINUX]" else ""
 
         val welcome = """
-Terminal Master Hub v1.4.1
+Terminal Master Hub v1.5.0
 Terminal Linux + Python IDE + Root Tools
 by $DEV_NAME
 
@@ -221,7 +221,7 @@ Comandos:
         val about = """
 $DEV_NAME
 
-Terminal Master Hub v1.4.1
+Terminal Master Hub v1.5.0
 
 App Android todo-en-uno:
 ✓ Terminal Linux (sin root)
@@ -362,7 +362,10 @@ App Android todo-en-uno:
         appendOutput("")
         appendOutput("✅ Instalacion completada exitosamente!")
         appendOutput("")
-        appendOutput("Comandos disponibles ahora:")
+        appendOutput("Comandos disponibles ahora:
+  mode ubuntu  - Activar modo Ubuntu (linker directo)
+  apt update   - Actualizar paquetes
+  apt install python3 cmus - Instalar herramientas")
         appendOutput("  mode ubuntu  - Activar modo Ubuntu (PRoot)")
         appendOutput("  mode local   - Volver al modo Bootstrap local")
         appendOutput("  apt update   - Actualizar paquetes Ubuntu")
@@ -525,8 +528,8 @@ App Android todo-en-uno:
             cmd.startsWith("linux") || cmd.startsWith("bootstrap") -> handleLinuxSetup(cmd)
             cmd.startsWith("ubuntu") && cmd.contains("install") -> handleLinuxSetup(cmd)
             cmd.startsWith("ubuntu") || cmd.startsWith("proot") -> handleProotSetup()
-            cmd == "mode ubuntu" || cmd == "mode proot" -> { useProotMode = true; appendOutput("Modo Ubuntu ARM64 activado. Los comandos se ejecutaran dentro de PRoot.") }
-            cmd == "mode local" || cmd == "mode bootstrap" -> { useProotMode = false; appendOutput("Modo Bootstrap local activado.") }
+            cmd == "mode ubuntu" || cmd == "mode proot" -> { useProotMode = true; appendOutput("Modo Ubuntu ARM64 activado. Los comandos se ejecutan via linker directo (sin PRoot).") }
+            cmd == "mode local" || cmd == "mode bootstrap" -> { useProotMode = false; appendOutput("Modo local activado. Solo comandos basicos del sistema.") }
             cmd == "explorer" || cmd == "files" -> showFileExplorer()
             cmd.startsWith("explorer ") -> openExplorerPath(cmd.substringAfter(" "))
             cmd.startsWith("social") || cmd.startsWith("redes") -> showSocialMedia()
@@ -571,8 +574,25 @@ App Android todo-en-uno:
 
     private suspend fun runShell(cmd: String) {
         try {
-            // PRoot/Ubuntu mode: ejecutar dentro del entorno Ubuntu via linker64
-            if ((useProotMode || cmd.startsWith("apt") || cmd.startsWith("python3") || cmd.startsWith("pip") || cmd.startsWith("cmus")) && prootManager.isProotAvailable() && prootManager.isUbuntuInstalled()) {
+            // v1.5.0: Usar linker directo de Ubuntu (ld-linux-aarch64.so.1)
+            // para comandos que requieren el entorno Linux.
+            // Esto funciona en Android 14+ sin PRoot ni libtalloc.
+            if (prootManager.isUbuntuInstalled() && (
+                    useProotMode ||
+                    cmd.startsWith("apt ") || cmd == "apt" ||
+                    cmd.startsWith("apt-get") ||
+                    cmd.startsWith("python3") ||
+                    cmd.startsWith("pip") ||
+                    cmd.startsWith("cmus") ||
+                    cmd.startsWith("bash") ||
+                    cmd.startsWith("tar ") ||
+                    cmd.startsWith("git ") ||
+                    cmd.startsWith("make ") ||
+                    cmd.startsWith("gcc ") ||
+                    cmd.startsWith("g++ ") ||
+                    cmd.startsWith("node ") ||
+                    cmd.startsWith("npm ")
+                )) {
                 val result = prootManager.executeInProot(cmd)
                 if (result.isNotEmpty()) appendOutput(result)
                 appendOutput("")
@@ -582,14 +602,9 @@ App Android todo-en-uno:
             val prefixPath = bootstrapManager.getPrefixDir().absolutePath
             val homePath = "$prefixPath/${BootstrapManager.HOME_DIR}"
 
-            // En Android 14+, /data/data/ tiene noexec.
-            // NO incluimos $PREFIX/bin/ en PATH porque los binarios ahi no son ejecutables.
-            // Solo usamos PATH del sistema para comandos basicos (ls, pwd, echo, etc.)
-            // Para comandos avanzados (python3, apt, cmus) se requiere PRoot mode.
-            val envPrefix = "env PREFIX=$prefixPath HOME=$homePath PATH=/system/bin:/system/xbin LANG=en_US.UTF-8 LC_ALL=C"
-            val resolvedCmd = "$envPrefix $cmd"
-
-            val pb = ProcessBuilder("sh", "-c", resolvedCmd)
+            // Comandos basicos del sistema Android (ls, pwd, echo, cd, etc.)
+            // Usamos PATH del sistema, NO incluimos PREFIX/bin/ (noexec)
+            val pb = ProcessBuilder("sh", "-c", cmd)
             pb.environment()["PREFIX"] = prefixPath
             pb.environment()["HOME"] = homePath
             pb.environment()["PATH"] = "/system/bin:/system/xbin"
