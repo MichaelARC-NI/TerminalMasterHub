@@ -119,7 +119,7 @@ class AdbNativeManager(private val context: Context) {
             append(" -r ${ubuntuDir.absolutePath}")
             append(" -b /system -b /dev -b /proc -b /sys -b /storage -b /dev/pts")
             append(" -w /root")
-            append(" /bin/bash -c 'export PATH=/system/bin:/system/xbin:$PATH; ")
+            append(" /bin/bash -c 'export PATH=/system/bin:/system/xbin:${'$'}PATH; ")
             append("$binPath $args'")
         }
     }
