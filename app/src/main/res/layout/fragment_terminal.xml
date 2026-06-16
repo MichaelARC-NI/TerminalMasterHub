@@ -32,7 +32,7 @@
         <ImageButton
             android:id="@+id/btnClearTerminal"
             android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_height="wrap_content"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_terminal"
             android:contentDescription="Limpiar" />
@@ -86,8 +86,8 @@
         android:gravity="center"
         android:orientation="horizontal"
         android:paddingHorizontal="2dp"
-        android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@id/keyboardToolbar"
+        android:visibility="visible"
+        app:layout_constraintBottom_toTopOf="@id/terminalInputBar"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
@@ -244,6 +244,7 @@
             android:textColor="@color/terminal_text"
             android:textColorHint="@color/divider"
             android:textSize="14sp"
+            android:maxLines="1"
             android:singleLine="true"
             android:fontFamily="monospace" />
 

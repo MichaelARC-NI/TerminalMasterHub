@@ -58,6 +58,7 @@ class TerminalFragment : Fragment() {
     private val pythonBridge by lazy { PythonBridge(requireContext()) }
     private val bootstrapManager by lazy { BootstrapManager(requireContext()) }
     private val prootManager by lazy { ProotManager(requireContext()) }
+    private val adbNativeManager by lazy { AdbNativeManager(requireContext()) }
     private var useProotMode = false
     private val commandHistory = mutableListOf<String>()
     private var historyIndex = -1
@@ -105,8 +106,17 @@ class TerminalFragment : Fragment() {
     }
 
     private fun setupKeyboardToolbar() {
-        view?.findViewById<android.widget.Button>(R.id.btnKeyTab)?.setOnClickListener { terminalInput.text.insert(terminalInput.selectionStart, "\t") }
-        view?.findViewById<android.widget.Button>(R.id.btnKeyEsc)?.setOnClickListener { terminalInput.text.insert(terminalInput.selectionStart, "\u001b") }
+        // Tab
+        view?.findViewById<android.widget.Button>(R.id.btnKeyTab)?.setOnClickListener {
+            val cp = terminalInput.selectionStart
+            terminalInput.text.insert(cp, "\t")
+        }
+        // ESC
+        view?.findViewById<android.widget.Button>(R.id.btnKeyEsc)?.setOnClickListener {
+            val cp = terminalInput.selectionStart
+            terminalInput.text.insert(cp, "\u001b")
+        }
+        // Up arrow - history previous
         view?.findViewById<android.widget.Button>(R.id.btnKeyUp)?.setOnClickListener {
             if (commandHistory.isNotEmpty()) {
                 historyIndex = if (historyIndex > 0) historyIndex - 1 else 0
@@ -114,6 +124,7 @@ class TerminalFragment : Fragment() {
                 terminalInput.setSelection(terminalInput.text.length)
             }
         }
+        // Down arrow - history next
         view?.findViewById<android.widget.Button>(R.id.btnKeyDown)?.setOnClickListener {
             if (commandHistory.isNotEmpty() && historyIndex < commandHistory.size - 1) {
                 historyIndex++
@@ -121,8 +132,15 @@ class TerminalFragment : Fragment() {
                 terminalInput.setSelection(terminalInput.text.length)
             }
         }
-        view?.findViewById<android.widget.Button>(R.id.btnKeyHome)?.setOnClickListener { terminalInput.setSelection(0) }
-        view?.findViewById<android.widget.Button>(R.id.btnKeyEnd)?.setOnClickListener { terminalInput.setSelection(terminalInput.text.length) }
+        // Home - cursor to start
+        view?.findViewById<android.widget.Button>(R.id.btnKeyHome)?.setOnClickListener {
+            terminalInput.setSelection(0)
+        }
+        // End - cursor to end
+        view?.findViewById<android.widget.Button>(R.id.btnKeyEnd)?.setOnClickListener {
+            terminalInput.setSelection(terminalInput.text.length)
+        }
+        // Del - delete forward
         view?.findViewById<android.widget.Button>(R.id.btnKeyDel)?.setOnClickListener {
             val cp = terminalInput.selectionStart
             if (cp < terminalInput.text.length) {
@@ -131,49 +149,61 @@ class TerminalFragment : Fragment() {
                 terminalInput.setSelection(cp)
             }
         }
-        view?.findViewById<android.widget.Button>(R.id.btnKeyFiles)?.setOnClickListener { lifecycleScope.launch { showFileExplorer() } }
-        // Toggle keyboard toolbar via "Ctrl" button
+        // Files - open explorer
+        view?.findViewById<android.widget.Button>(R.id.btnKeyFiles)?.setOnClickListener {
+            lifecycleScope.launch { showFileExplorer() }
+        }
+        // Ctrl - toggle keyboard toolbar visibility
         view?.findViewById<android.widget.Button>(R.id.btnKeyCtrl)?.setOnClickListener {
             val kb = view?.findViewById<android.view.View>(R.id.keyboardToolbar)
             if (kb != null) {
-                kb.visibility = if (kb.visibility == android.view.View.VISIBLE) android.view.View.GONE else android.view.View.VISIBLE
+                kb.visibility = if (kb.visibility == android.view.View.VISIBLE)
+                    android.view.View.GONE else android.view.View.VISIBLE
             }
         }
-        // "Alt" button sends Ctrl prefix
+        // Alt - send Ctrl+C (SIGINT)
         view?.findViewById<android.widget.Button>(R.id.btnKeyAlt)?.setOnClickListener {
-            terminalInput.text.insert(terminalInput.selectionStart, "\u0003")
+            executeCommandWithText("\u0003")
+        }
+    }
+
+    /** Execute Ctrl character as a command (for Alt/Ctrl key combinations) */
+    private fun executeCommandWithText(text: String) {
+        appendOutput("$ $text")
+        lifecycleScope.launch {
+            handleCommand(text)
         }
     }
 
     // ===================== FEATURE 1: BANNER DINÁMICO =====================
 
     private fun printWelcome() {
-        // Banner limpio sin bordes ASCII — solo texto con MONOSPACE
         val rootBadge = if (hasRootAccess) " [ROOT]" else ""
         val bootstrapBadge = if (bootstrapManager.isInstalled()) " [LINUX]" else ""
 
         val welcome = """
-Terminal Master Hub v1.5.0
+Terminal Master Hub v1.5.3
 Terminal Linux + Python IDE + Root Tools
 by $DEV_NAME
 
 Estado: Terminal lista$rootBadge$bootstrapBadge
 
 Comandos:
-  help       — Ayuda general
-  clear      — Limpiar terminal
-  py <code>  — Ejecuta código Python inline
-  python     — Abre editor Python
-  run <file> — Ejecuta script .py o .sh
-  ls, pwd    — Comandos shell
-  root       — Verificar estado de root
-  linux      — Gestionar entorno Linux
-  explorer   — Explorador de archivos
-  social     — Redes sociales
-  about      — Acerca de
-  ubuntu     — Gestionar Ubuntu ARM64
-  proot      — Estado de Ubuntu ARM64
-  mode       — Cambiar modo (ubuntu/local)
+  help       - Ayuda general
+  clear      - Limpiar terminal
+  py <code>  - Ejecuta codigo Python inline
+  python     - Abre editor Python
+  run <file> - Ejecuta script .py o .sh
+  ls, pwd    - Comandos shell
+  root       - Verificar estado de root
+  linux      - Gestionar entorno Linux
+  explorer   - Explorador de archivos
+  social     - Redes sociales
+  about      - Acerca de
+  ubuntu     - Gestionar Ubuntu ARM64
+  proot      - Estado de Ubuntu ARM64
+  mode       - Cambiar modo (ubuntu/local)
+  cmus       - Reproductor de musica
 
 """.trimIndent()
         appendOutput(welcome, isWelcome = true)
@@ -263,7 +293,7 @@ Comandos:
         val about = """
 $DEV_NAME
 
-Terminal Master Hub v1.5.0
+Terminal Master Hub v1.5.3
 
 App Android todo-en-uno:
 ✓ Terminal Linux (sin root)
@@ -581,6 +611,15 @@ App Android todo-en-uno:
                 if (file.name.endsWith(".py")) runPythonFile(path)
                 else runShell("sh \"$path\"")
             }
+            cmd == "adb" || cmd.startsWith("adb ") || cmd == "fastboot" || cmd.startsWith("fastboot ") -> {
+                if (prootManager.isUbuntuInstalled() && useProotMode) {
+                    runShell(cmd)
+                } else {
+                    appendOutput("  ADB/Fastboot nativos disponibles")
+                    appendOutput("  Activa modo Ubuntu primero: mode ubuntu")
+                    appendOutput("  O ve a la pestana ADB/Fastboot para USB OTG")
+                }
+            }
             cmd == "apt" || cmd.startsWith("apt ") || cmd == "apt-get" || cmd.startsWith("apt-get ") -> {
                 appendOutput("Usa: apt update, apt install <paquete>")
                 appendOutput("Si estas en modo local, primero instala Ubuntu:")
@@ -628,7 +667,9 @@ App Android todo-en-uno:
                     cmd.startsWith("gcc ") ||
                     cmd.startsWith("g++ ") ||
                     cmd.startsWith("node ") ||
-                    cmd.startsWith("npm ")
+                    cmd.startsWith("npm ") ||
+                    cmd.startsWith("adb ") || cmd == "adb" ||
+                    cmd.startsWith("fastboot ") || cmd == "fastboot"
                 )) {
                 val result = prootManager.executeInProot(cmd)
                 if (result.isNotEmpty()) appendOutput(result)

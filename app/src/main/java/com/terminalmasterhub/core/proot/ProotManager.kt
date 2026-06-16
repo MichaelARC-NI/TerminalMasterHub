@@ -378,7 +378,7 @@ class ProotManager(private val context: Context) {
                     append("HOME=$homeDir ")
                     append("TMPDIR=$tmpDir ")
                     append("PROOT_TMP_DIR=$prootTmpDir ")
-                    append("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ")
+                    append("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/adb-native ")
                     append("LANG=en_US.UTF-8 LC_ALL=C TERM=xterm-256color ")
                 }
 
@@ -397,6 +397,7 @@ class ProotManager(private val context: Context) {
                     append(" -b /sys")
                     append(" -b /storage")
                     append(" -b /dev/pts")
+                    append(" -b ${context.filesDir.absolutePath}/adb-native:/adb-native")
                     append(" -w ${workDir ?: homeDir}")
                     append(" /bin/bash -c '")
                     append("export $envVars; ")
@@ -437,6 +438,7 @@ class ProotManager(private val context: Context) {
             append(" -b /sys")
             append(" -b /storage")
             append(" -b /dev/pts")
+            append(" -b ${context.filesDir.absolutePath}/adb-native:/adb-native")
             append(" -w /root")
             append(" /bin/bash --login")
         }
