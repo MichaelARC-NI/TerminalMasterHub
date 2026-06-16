@@ -291,8 +291,8 @@ class ProotManager(private val context: Context) {
 
     private fun configureUbuntu(ubuntuDir: File) {
         try {
-            // Create essential directories
-            listOf("root", "tmp", "dev", "proc", "sys", "dev/pts", "etc/apt", "usr/bin").forEach { dir ->
+            // Create essential directories (including bin/)
+            listOf("root", "tmp", "dev", "proc", "sys", "dev/pts", "etc/apt", "usr/bin", "bin", "usr/local/bin", "usr/local/sbin").forEach { dir ->
                 File(ubuntuDir, dir).mkdirs()
             }
 
@@ -313,6 +313,26 @@ class ProotManager(private val context: Context) {
             val envScript = File(ubuntuDir, "usr/bin/env")
             if (!envScript.exists() || envScript.length() < 10) {
                 envScript.writeText("#!/bin/bash\n/usr/bin/bash -c \"\$@\"\n")
+            }
+
+            // Ensure /bin/bash exists (may be at /usr/bin/bash)
+            // In Ubuntu 24.04, /bin is a symlink to /usr/bin
+            // PRoot may not follow symlinks correctly, so ensure both exist
+            val binBash = File(ubuntuDir, "bin/bash")
+            val usrBinBash = File(ubuntuDir, "usr/bin/bash")
+            if (!binBash.exists() && usrBinBash.exists()) {
+                binBash.parentFile?.mkdirs()
+                // Create hardlink or copy instead of symlink (symlinks may fail on some FS)
+                usrBinBash.copyTo(binBash, overwrite = true)
+                binBash.setExecutable(true)
+            }
+            // Also ensure /bin/sh exists
+            val binSh = File(ubuntuDir, "bin/sh")
+            val usrBinSh = File(ubuntuDir, "usr/bin/sh")
+            if (!binSh.exists() && usrBinSh.exists()) {
+                binSh.parentFile?.mkdirs()
+                usrBinSh.copyTo(binSh, overwrite = true)
+                binSh.setExecutable(true)
             }
 
             // /.bashrc para el prompt
@@ -372,16 +392,6 @@ class ProotManager(private val context: Context) {
                 // Comando bash escapado
                 val escapedCmd = command.replace("'", "'\\''")
 
-                // FIX v1.5.2: NO usamos /usr/bin/env porque da 'not executable' en noexec
-                // En su lugar, pasamos las variables de entorno inline al bash -c
-                val envVars = buildString {
-                    append("HOME=$homeDir ")
-                    append("TMPDIR=$tmpDir ")
-                    append("PROOT_TMP_DIR=$prootTmpDir ")
-                    append("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/adb-native ")
-                    append("LANG=en_US.UTF-8 LC_ALL=C TERM=xterm-256color ")
-                }
-
                 // Construir comando PRoot completo
                 // El primer binario que ejecuta PRoot es /bin/bash (glibc)
                 // PRoot intercepta execve via ptrace, por lo que no necesita exec permissions
@@ -397,10 +407,14 @@ class ProotManager(private val context: Context) {
                     append(" -b /sys")
                     append(" -b /storage")
                     append(" -b /dev/pts")
-                    append(" -b ${context.filesDir.absolutePath}/adb-native:/adb-native")
+                    val adbNativeDir = File(context.filesDir, "adb-native")
+                    if (adbNativeDir.exists()) {
+                        append(" -b ${adbNativeDir.absolutePath}:/adb-native")
+                    }
+                    // Use PROOT_TMP_DIR env var for PRoot temp directory
                     append(" -w ${workDir ?: homeDir}")
-                    append(" /bin/bash -c '")
-                    append("export $envVars; ")
+                    append(" /bin/bash --login -c '")
+                    append("export PROOT_TMP_DIR=$prootTmpDir TMPDIR=$tmpDir; ")
                     append("$escapedCmd'")
                 }
 
@@ -438,7 +452,10 @@ class ProotManager(private val context: Context) {
             append(" -b /sys")
             append(" -b /storage")
             append(" -b /dev/pts")
-            append(" -b ${context.filesDir.absolutePath}/adb-native:/adb-native")
+            val adbNativeDir = File(context.filesDir, "adb-native")
+            if (adbNativeDir.exists()) {
+                append(" -b ${adbNativeDir.absolutePath}:/adb-native")
+            }
             append(" -w /root")
             append(" /bin/bash --login")
         }
