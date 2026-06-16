@@ -337,7 +337,7 @@ class ProotManager(private val context: Context) {
                 "  alias python=python3\n" +
                 "  alias pip=pip3\n" +
                 "fi\n" +
-                'PS1='"'\\[\\033[1;32m\\]TerminalMaster\\[\\033[0m\\]:\\[\\033[1;34m\\]\\w\\[\\033[0m\\]$ '"'\n'
+                "PS1='\\[\\033[1;32m\\]TerminalMaster\\[\\033[0m\\]:\\[\\033[1;34m\\]\\w\\[\\033[0m\\]$ '\n"
             )
 
         } catch (e: Exception) {
