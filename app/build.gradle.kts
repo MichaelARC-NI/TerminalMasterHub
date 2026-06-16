@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace = "com.terminalmasterhub"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.terminalmasterhub"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 22
-        versionName = "1.5.4"
+        targetSdk = 34
+        versionCode = 23
+        versionName = "1.5.5"
     }
 
     buildTypes {
@@ -55,7 +55,7 @@ android {
 
 dependencies {
     // Core Android
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.7")
@@ -65,7 +65,7 @@ dependencies {
     // UI
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
-    implementation("androidx.recyclerview:recyclerview:1.4.0")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
 
     // Navigation

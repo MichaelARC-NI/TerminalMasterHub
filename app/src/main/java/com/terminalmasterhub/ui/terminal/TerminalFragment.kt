@@ -185,7 +185,7 @@ class TerminalFragment : Fragment() {
         val bootstrapBadge = if (bootstrapManager.isInstalled()) " [LINUX]" else ""
 
         val welcome = """
-Terminal Master Hub v1.5.3
+Terminal Master Hub v1.5.5.5
 Terminal Linux + Python IDE + Root Tools
 by $DEV_NAME
 
@@ -296,7 +296,7 @@ Comandos:
         val about = """
 $DEV_NAME
 
-Terminal Master Hub v1.5.3
+Terminal Master Hub v1.5.5.5
 
 App Android todo-en-uno:
 ✓ Terminal Linux (sin root)
@@ -603,11 +603,10 @@ App Android todo-en-uno:
             cmd.startsWith("explorer ") -> openExplorerPath(cmd.substringAfter(" "))
             cmd.startsWith("social") || cmd.startsWith("redes") -> showSocialMedia()
             cmd.startsWith("about") || cmd.startsWith("info") || cmd == "acerca" -> showAbout()
-            cmd.startsWith("py ") && !cmd.startsWith("py install") && !cmd.startsWith("python install") -> 
+            cmd.startsWith("py ") && !cmd.startsWith("py install") && !cmd.startsWith("python install") -> {
                 val code = cmd.substringAfter(" ")
                 runPythonCode(code, forceGraphic = false)
             }
-            cmd == "python" || cmd == "py" -> withContext(Dispatchers.Main) { showPythonDialog() }
             cmd.startsWith("run ") -> {
                 val path = cmd.substringAfter(" ")
                 val file = File(path)
