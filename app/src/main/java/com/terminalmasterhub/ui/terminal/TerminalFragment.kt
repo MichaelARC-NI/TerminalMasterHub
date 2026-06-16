@@ -21,6 +21,7 @@ import com.terminalmasterhub.core.permissions.PermissionManager
 import com.terminalmasterhub.core.root.BootstrapManager
 import com.terminalmasterhub.core.root.RootChecker
 import com.terminalmasterhub.core.proot.ProotManager
+import com.terminalmasterhub.core.adb.AdbNativeManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
