@@ -21,6 +21,7 @@ import com.terminalmasterhub.core.permissions.PermissionManager
 import com.terminalmasterhub.core.root.BootstrapManager
 import com.terminalmasterhub.core.root.RootChecker
 import com.terminalmasterhub.core.proot.ProotManager
+import com.terminalmasterhub.core.python.Py2DroidManager
 import com.terminalmasterhub.core.adb.AdbNativeManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -60,6 +61,7 @@ class TerminalFragment : Fragment() {
     private val bootstrapManager by lazy { BootstrapManager(requireContext()) }
     private val prootManager by lazy { ProotManager(requireContext()) }
     private val adbNativeManager by lazy { AdbNativeManager(requireContext()) }
+    private val py2DroidManager by lazy { Py2DroidManager(requireContext()) }
     private var useProotMode = false
     private val commandHistory = mutableListOf<String>()
     private var historyIndex = -1
@@ -601,7 +603,7 @@ App Android todo-en-uno:
             cmd.startsWith("explorer ") -> openExplorerPath(cmd.substringAfter(" "))
             cmd.startsWith("social") || cmd.startsWith("redes") -> showSocialMedia()
             cmd.startsWith("about") || cmd.startsWith("info") || cmd == "acerca" -> showAbout()
-            cmd.startsWith("py ") || cmd.startsWith("python ") -> {
+            cmd.startsWith("py ") && !cmd.startsWith("py install") && !cmd.startsWith("python install") -> 
                 val code = cmd.substringAfter(" ")
                 runPythonCode(code, forceGraphic = false)
             }
@@ -621,6 +623,38 @@ App Android todo-en-uno:
                     appendOutput("  O ve a la pestana ADB/Fastboot para USB OTG")
                 }
             }
+            cmd == "python" || cmd == "py" -> {
+                if (!py2DroidManager.isInstalled()) {
+                    appendOutput("Python nativo no instalado. Usa: python install")
+                    appendOutput("O usa: mode ubuntu && python3 (Python via PRoot/Ubuntu)")
+                } else {
+                    val result = py2DroidManager.executePython("print(\"Python listo!\"); import sys; print(f\"Version: {sys.version}\")")
+                    appendOutput("  " + result)
+                    appendOutput("  Usa: py <codigo> para ejecutar codigo Python")
+                    appendOutput("  Usa: python install --packages matplotlib numpy para instalar paquetes")
+                }
+            }
+            cmd == "python install" || cmd.startsWith("python install ") || cmd == "py install" -> {
+                val packages = cmd.removePrefix("python install").removePrefix("py install").trim()
+                appendOutput("Instalando CPython ARM64 nativo...")
+                py2DroidManager.onProgress = { msg, pct ->
+                    appendOutput("  [$pct%] $msg")
+                }
+                val ok = py2DroidManager.install()
+                if (ok) {
+                    appendOutput("CPython 3.14 ARM64 instalado! Usa: py <codigo>")
+                } else {
+                    appendOutput("Error instalando CPython")
+                }
+                if (packages.isNotEmpty() && packages != "--packages") {
+                    appendOutput("Instalando paquetes pip: $packages...")
+                    val result = py2DroidManager.executePython(
+                        "import subprocess; subprocess.run([\"pip\", \"install\", \"$packages\"])"
+                    )
+                    appendOutput(result)
+                }
+            }
+
             cmd == "apt" || cmd.startsWith("apt ") || cmd == "apt-get" || cmd.startsWith("apt-get ") -> {
                 appendOutput("Usa: apt update, apt install <paquete>")
                 appendOutput("Si estas en modo local, primero instala Ubuntu:")
