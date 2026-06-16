@@ -82,9 +82,22 @@ class ProotManager(private val context: Context) {
     /** Ubuntu esta instalado si /etc/os-release existe */
     fun isUbuntuInstalled(): Boolean {
         val ubuntuDir = getUbuntuDir()
-        return ubuntuDir.exists() &&
-                File(ubuntuDir, "etc/os-release").exists() &&
-                File(ubuntuDir, "usr/bin/apt").exists()
+        if (!ubuntuDir.exists()) return false
+        // Verificar archivos clave del rootfs
+        val hasOsRelease = File(ubuntuDir, "etc/os-release").exists()
+        val hasApt = File(ubuntuDir, "usr/bin/apt").exists()
+        val hasBash = File(ubuntuDir, "bin/bash").exists() || File(ubuntuDir, "usr/bin/bash").exists()
+        // Si falta /bin/bash, intentar reparar
+        if (hasApt && hasOsRelease && !File(ubuntuDir, "bin/bash").exists()) {
+            val usrBash = File(ubuntuDir, "usr/bin/bash")
+            if (usrBash.exists()) {
+                try {
+                    usrBash.copyTo(File(ubuntuDir, "bin/bash"), overwrite = true)
+                    File(ubuntuDir, "bin/bash").setExecutable(true)
+                } catch (_: Exception) {}
+            }
+        }
+        return hasOsRelease && hasApt && hasBash
     }
 
     fun getStatus(): ProotStatus {
@@ -432,7 +445,8 @@ class ProotManager(private val context: Context) {
      * Obtiene el comando proot para terminal interactiva (usado en 'mode ubuntu').
      */
     fun getProotInitCommand(): String? {
-        if (!isProotAvailable() || !isUbuntuInstalled()) return null
+        if (!isProotAvailable()) return null
+        if (!isUbuntuInstalled()) return null
         val prootBin = getProotBinary().absolutePath
         val prootDir = getProotBaseDir().absolutePath
         val ubuntuDir = getUbuntuDir().absolutePath
@@ -441,8 +455,17 @@ class ProotManager(private val context: Context) {
         File(tmpDir).mkdirs()
         File("$ubuntuDir/root").mkdirs()
 
-        // FIX v1.5.2: NO usamos /usr/bin/env
-        // usamos bash --login con export de variables de entorno
+        // FIX v1.5.6+: Runtime repair of /bin/bash
+        val binBash = File("$ubuntuDir/bin/bash")
+        val usrBinBash = File("$ubuntuDir/usr/bin/bash")
+        if (!binBash.exists() && usrBinBash.exists()) {
+            binBash.parentFile?.mkdirs()
+            try {
+                usrBinBash.copyTo(binBash, overwrite = true)
+                binBash.setExecutable(true)
+            } catch (_: Exception) {}
+        }
+
         return buildString {
             append("exec env PROOT_TMP_DIR=$tmpDir LD_LIBRARY_PATH=$ldLibPath /system/bin/linker64 $prootBin")
             append(" -r $ubuntuDir")
