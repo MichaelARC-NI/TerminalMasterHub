@@ -132,11 +132,16 @@ class TerminalFragment : Fragment() {
             }
         }
         view?.findViewById<android.widget.Button>(R.id.btnKeyFiles)?.setOnClickListener { lifecycleScope.launch { showFileExplorer() } }
-        view?.findViewById<android.widget.ImageButton>(R.id.btnToggleKeyboard)?.setOnClickListener {
+        // Toggle keyboard toolbar via "Ctrl" button
+        view?.findViewById<android.widget.Button>(R.id.btnKeyCtrl)?.setOnClickListener {
             val kb = view?.findViewById<android.view.View>(R.id.keyboardToolbar)
             if (kb != null) {
                 kb.visibility = if (kb.visibility == android.view.View.VISIBLE) android.view.View.GONE else android.view.View.VISIBLE
             }
+        }
+        // "Alt" button sends Ctrl prefix
+        view?.findViewById<android.widget.Button>(R.id.btnKeyAlt)?.setOnClickListener {
+            terminalInput.text.insert(terminalInput.selectionStart, "\u0003")
         }
     }
 
