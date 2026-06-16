@@ -307,7 +307,7 @@ App Android todo-en-uno:
     private suspend fun handleProotInstall() {
         appendOutput("=== Instalando Ubuntu ARM64 ===")
         appendOutput("")
-        appendOutput("Entorno Ubuntu 24.04 ARM64 con linker directo (sin PRoot).")
+        appendOutput("Entorno Ubuntu 24.04 ARM64 con PRoot + Ubuntu.")
         appendOutput("Basado en el enfoque de Termux y Kali NetHunter.")
         appendOutput("")
 
@@ -363,7 +363,7 @@ App Android todo-en-uno:
         appendOutput("✅ Instalacion completada exitosamente!")
         appendOutput("")
         appendOutput("Comandos disponibles ahora:")
-        appendOutput("  mode ubuntu  - Activar modo Ubuntu (linker directo)")
+        appendOutput("  mode ubuntu  - Activar modo Ubuntu (PRoot")
         appendOutput("  mode local   - Volver al modo Bootstrap local")
         appendOutput("  apt update   - Actualizar paquetes Ubuntu")
         appendOutput("  apt install python3 cmus - Instalar herramientas")
@@ -522,7 +522,7 @@ App Android todo-en-uno:
             cmd.startsWith("linux") || cmd.startsWith("bootstrap") -> handleLinuxSetup(cmd)
             cmd.startsWith("ubuntu") && cmd.contains("install") -> handleLinuxSetup(cmd)
             cmd.startsWith("ubuntu") || cmd.startsWith("proot") -> handleProotSetup()
-            cmd == "mode ubuntu" || cmd == "mode proot" -> { useProotMode = true; appendOutput("Modo Ubuntu ARM64 activado. Los comandos se ejecutan via linker directo (sin PRoot).") }
+            cmd == "mode ubuntu" || cmd == "mode proot" -> { useProotMode = true; appendOutput("Modo Ubuntu ARM64 activado. Los comandos se ejecutan via PRoot + Ubuntu.") }
             cmd == "mode local" || cmd == "mode bootstrap" -> { useProotMode = false; appendOutput("Modo local activado. Solo comandos basicos del sistema.") }
             cmd == "explorer" || cmd == "files" -> showFileExplorer()
             cmd.startsWith("explorer ") -> openExplorerPath(cmd.substringAfter(" "))
@@ -568,9 +568,10 @@ App Android todo-en-uno:
 
     private suspend fun runShell(cmd: String) {
         try {
-            // v1.5.0: Usar linker directo de Ubuntu (ld-linux-aarch64.so.1)
+            // v1.5.1: Usar PRoot + Ubuntu ARM64
             // para comandos que requieren el entorno Linux.
-            // Esto funciona en Android 14+ sin PRoot ni libtalloc.
+            // PRoot usa ptrace para ejecutar binarios glibc sin root.
+            // Compatible con Android 14, 15, 16, 17+.
             if (prootManager.isUbuntuInstalled() && (
                     useProotMode ||
                     cmd.startsWith("apt ") || cmd == "apt" ||

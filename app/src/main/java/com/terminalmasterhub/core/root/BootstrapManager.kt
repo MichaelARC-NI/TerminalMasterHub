@@ -150,41 +150,42 @@ PS1='\033[1;32mTerminalMaster\033[0m:\033[1;34m\w\033[0m\$ '
 export PATH=/system/bin:/system/xbin
 
 # ============================================================================
-# CONFIGURACION DE UBUNTU VIA LINKER DIRECTO (v1.5.0)
+# CONFIGURACION DE UBUNTU VIA PROOT (v1.5.1)
 # ============================================================================
-# En lugar de PRoot, usamos el linker de Ubuntu (ld-linux-aarch64.so.1)
-# que es un binario ESTATICAMENTE enlazado (204KB, no necesita librerias).
+# Usamos PRoot para ejecutar binarios de Ubuntu (glibc) en Android.
+# PRoot usa ptrace para interceptar syscalls y traducir rutas.
 # 
-# linker64 -> ld-linux-aarch64.so.1 -> /usr/bin/bash -> apt, python3, etc.
+# /system/bin/linker64 + LD_LIBRARY_PATH (libtalloc) -> proot-arm64
+#   -> ptrace -> ubuntu/bin/bash (glibc) -> apt, python3, cmus
 # ============================================================================
 
 UBUNTU_DIR=DOLLARPREFIX/proot/ubuntu
-UBUNTU_LINKER=DOLLARUBUNTU_DIR/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
-UBUNTU_LIB=DOLLARUBUNTU_DIR/usr/lib/aarch64-linux-gnu
-ANDROID_LINKER=/system/bin/linker64
+PROOT_DIR=DOLLARPREFIX/proot
+PROOT_BIN=DOLLARPROOT_DIR/proot-arm64
+LD_PATH=DOLLARPROOT_DIR:/system/lib64:/vendor/lib64
+TMP_DIR=DOLLARUBUNTU_DIR/tmp
 
-if [ -f DOLLARUBUNTU_LINKER ] && [ -d DOLLARUBUNTU_DIR/etc ]; then
-    if [ -f DOLLARUBUNTU_DIR/bin/bash ]; then
-        # Alias directos para herramientas Ubuntu via linker
-        alias apt='DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/usr/bin/apt'
-        alias apt-get='DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/usr/bin/apt-get'
-        alias python3='DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/usr/bin/python3'
-        alias python=python3
-        alias pip3='DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/usr/bin/pip3'
-        alias pip=pip3
-        alias cmus='DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/usr/bin/cmus'
-        alias tar='DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/bin/tar'
-        alias bash='exec DOLLARANDROID_LINKER DOLLARUBUNTU_LINKER --library-path DOLLARUBUNTU_LIB DOLLARUBUNTU_DIR/bin/bash --login'
-        
-        echo ""
-        echo "  Ubuntu 24.04 ARM64 listo via linker directo!"
-        echo "  Comandos: apt, python3, cmus, pip, tar, bash"
-        echo "  Usa 'apt install <paquete>' para instalar mas herramientas"
-    else
-        echo ""
-        echo "  Ubuntu listo pero bash no instalado."
-        echo "  Usa: apt update && apt install bash python3 cmus"
-    fi
+# Funcion para ejecutar comandos en Ubuntu via PRoot
+ubuntu_exec() {
+    env PROOT_TMP_DIR=DOLLARTMP_DIR LD_LIBRARY_PATH=DOLLARLD_PATH \
+        /system/bin/linker64 DOLLARPROOT_BIN \
+        -r DOLLARUBUNTU_DIR \
+        -b /system -b /dev -b /proc -b /sys -b /storage -b /dev/pts \
+        -w /root /usr/bin/env \
+        HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+        LANG=en_US.UTF-8 LC_ALL=C TERM=xterm-256color \
+        PROOT_TMP_DIR=DOLLARTMP_DIR \
+        /bin/bash -c "DOLLAR*"
+}
+
+# Alias que usan PRoot para ejecutar comandos Ubuntu
+if [ -f DOLLARPROOT_BIN ] && [ -d DOLLARUBUNTU_DIR/etc ]; then
+    alias ubuntu='env PROOT_TMP_DIR=DOLLARTMP_DIR LD_LIBRARY_PATH=DOLLARLD_PATH /system/bin/linker64 DOLLARPROOT_BIN -r DOLLARUBUNTU_DIR -b /system -b /dev -b /proc -b /sys -b /storage -b /dev/pts -w /root /usr/bin/env HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin LANG=en_US.UTF-8 LC_ALL=C TERM=xterm-256color PROOT_TMP_DIR=DOLLARTMP_DIR /bin/bash --login'
+    
+    echo ""
+    echo "  Ubuntu 24.04 ARM64 listo via PRoot!"
+    echo "  Usa 'ubuntu' para entrar al shell interactivo"
+    echo "  O ejecuta: mode ubuntu"
 else
     echo ""
     echo "  Ubuntu no instalado. Usa: bootstrap proot install"
