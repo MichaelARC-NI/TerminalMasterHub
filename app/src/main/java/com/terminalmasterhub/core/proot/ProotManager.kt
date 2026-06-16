@@ -291,30 +291,29 @@ class ProotManager(private val context: Context) {
 
     private fun configureUbuntu(ubuntuDir: File) {
         try {
+            // Create essential directories
+            listOf("root", "tmp", "dev", "proc", "sys", "dev/pts", "etc/apt", "usr/bin").forEach { dir ->
+                File(ubuntuDir, dir).mkdirs()
+            }
+
             // /etc/resolv.conf para DNS
-            val resolvConf = File(ubuntuDir, "etc/resolv.conf")
-            resolvConf.parentFile?.mkdirs()
-            resolvConf.writeText("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
+            File(ubuntuDir, "etc/resolv.conf").writeText("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
 
             // /etc/apt/sources.list con repositorios Ubuntu
-            val sourcesList = File(ubuntuDir, "etc/apt/sources.list")
-            sourcesList.parentFile?.mkdirs()
-            sourcesList.writeText(
+            File(ubuntuDir, "etc/apt/sources.list").writeText(
                 "deb http://ports.ubuntu.com/ubuntu-ports noble main restricted universe multiverse\n" +
                 "deb http://ports.ubuntu.com/ubuntu-ports noble-updates main restricted universe multiverse\n" +
                 "deb http://ports.ubuntu.com/ubuntu-ports noble-security main restricted universe multiverse\n"
             )
 
-            // /tmp
-            File(ubuntuDir, "tmp").mkdirs()
-
-            // /root
-            File(ubuntuDir, "root").mkdirs()
-
-            // /dev y /proc (bind mounts de PRoot)
-            File(ubuntuDir, "dev").mkdirs()
-            File(ubuntuDir, "proc").mkdirs()
-            File(ubuntuDir, "sys").mkdirs()
+            // Create a minimal /usr/bin/env script that works on noexec
+            // Since Android 14+ mounts /data/data as noexec, we can't use the real /usr/bin/env
+            // Instead we use a shell script that just exec's the command
+            // PRoot will handle the execution via ptrace
+            val envScript = File(ubuntuDir, "usr/bin/env")
+            if (!envScript.exists() || envScript.length() < 10) {
+                envScript.writeText("#!/bin/bash\n/usr/bin/bash -c \"\$@\"\n")
+            }
 
             // /.bashrc para el prompt
             val bashrc = File(ubuntuDir, "root/.bashrc")
@@ -330,9 +329,6 @@ class ProotManager(private val context: Context) {
                 "alias ll='ls -la'\n" +
                 "alias la='ls -A'\n" +
                 "alias l='ls -CF'\n" +
-                "if [ -f /usr/share/bash-completion/bash_completion ]; then\n" +
-                "  . /usr/share/bash-completion/bash_completion 2>/dev/null || true\n" +
-                "fi\n" +
                 "if command -v python3 &>/dev/null; then\n" +
                 "  alias python=python3\n" +
                 "  alias pip=pip3\n" +
@@ -366,6 +362,7 @@ class ProotManager(private val context: Context) {
                 val homeDir = "$ubuntuDir/root"
                 val tmpDir = "$ubuntuDir/tmp"
                 File(tmpDir).mkdirs()
+                File(homeDir).mkdirs()
 
                 // LD_LIBRARY_PATH: librerias de PRoot (libtalloc, libandroid-shmem)
                 val ldLibPath = "$prootDir:/system/lib64:/vendor/lib64"
@@ -375,7 +372,19 @@ class ProotManager(private val context: Context) {
                 // Comando bash escapado
                 val escapedCmd = command.replace("'", "'\\''")
 
+                // FIX v1.5.2: NO usamos /usr/bin/env porque da 'not executable' en noexec
+                // En su lugar, pasamos las variables de entorno inline al bash -c
+                val envVars = buildString {
+                    append("HOME=$homeDir ")
+                    append("TMPDIR=$tmpDir ")
+                    append("PROOT_TMP_DIR=$prootTmpDir ")
+                    append("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ")
+                    append("LANG=en_US.UTF-8 LC_ALL=C TERM=xterm-256color ")
+                }
+
                 // Construir comando PRoot completo
+                // El primer binario que ejecuta PRoot es /bin/bash (glibc)
+                // PRoot intercepta execve via ptrace, por lo que no necesita exec permissions
                 val prootCmd = buildString {
                     append("PROOT_TMP_DIR=$prootTmpDir ")
                     append("LD_LIBRARY_PATH=$ldLibPath ")
@@ -389,15 +398,9 @@ class ProotManager(private val context: Context) {
                     append(" -b /storage")
                     append(" -b /dev/pts")
                     append(" -w ${workDir ?: homeDir}")
-                    append(" /usr/bin/env")
-                    append(" HOME=$homeDir")
-                    append(" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-                    append(" LANG=en_US.UTF-8")
-                    append(" LC_ALL=C")
-                    append(" TERM=xterm-256color")
-                    append(" TMPDIR=$tmpDir")
-                    append(" PROOT_TMP_DIR=$prootTmpDir")
-                    append(" /bin/bash -c '$escapedCmd'")
+                    append(" /bin/bash -c '")
+                    append("export $envVars; ")
+                    append("$escapedCmd'")
                 }
 
                 val pb = ProcessBuilder("sh", "-c", prootCmd)
@@ -420,7 +423,11 @@ class ProotManager(private val context: Context) {
         val ubuntuDir = getUbuntuDir().absolutePath
         val tmpDir = "$ubuntuDir/tmp"
         val ldLibPath = "$prootDir:/system/lib64:/vendor/lib64"
+        File(tmpDir).mkdirs()
+        File("$ubuntuDir/root").mkdirs()
 
+        // FIX v1.5.2: NO usamos /usr/bin/env
+        // usamos bash --login con export de variables de entorno
         return buildString {
             append("exec env PROOT_TMP_DIR=$tmpDir LD_LIBRARY_PATH=$ldLibPath /system/bin/linker64 $prootBin")
             append(" -r $ubuntuDir")
@@ -431,14 +438,6 @@ class ProotManager(private val context: Context) {
             append(" -b /storage")
             append(" -b /dev/pts")
             append(" -w /root")
-            append(" /usr/bin/env")
-            append(" HOME=/root")
-            append(" TMPDIR=$tmpDir")
-            append(" PROOT_TMP_DIR=$tmpDir")
-            append(" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-            append(" LANG=en_US.UTF-8")
-            append(" LC_ALL=C")
-            append(" TERM=xterm-256color")
             append(" /bin/bash --login")
         }
     }

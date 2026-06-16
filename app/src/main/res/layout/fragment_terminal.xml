@@ -63,7 +63,7 @@
         android:padding="8dp"
         android:fillViewport="true"
         app:layout_constraintTop_toBottomOf="@id/terminalToolbar"
-        app:layout_constraintBottom_toTopOf="@id/terminalInputBar"
+        app:layout_constraintBottom_toTopOf="@id/keyboardToolbar"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
@@ -76,6 +76,141 @@
             android:textColor="@color/terminal_text"
             android:textSize="12sp" />
     </ScrollView>
+
+    <!-- Keyboard Toolbar v1.5.2 -->
+    <LinearLayout
+        android:id="@+id/keyboardToolbar"
+        android:layout_width="0dp"
+        android:layout_height="40dp"
+        android:background="@color/terminal_bg"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingHorizontal="2dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/keyboardToolbar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <Button
+            android:id="@+id/btnKeyTab"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="40dp"
+            android:layout_height="30dp"
+            android:layout_marginHorizontal="1dp"
+            android:fontFamily="monospace"
+            android:text="Tab"
+            android:textSize="9sp"
+            android:padding="0dp"
+            android:textColor="@color/terminal_green" />
+
+        <Button
+            android:id="@+id/btnKeyCtrl"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="40dp"
+            android:layout_height="30dp"
+            android:layout_marginHorizontal="1dp"
+            android:fontFamily="monospace"
+            android:text="Ctrl"
+            android:textSize="9sp"
+            android:padding="0dp"
+            android:textColor="@color/terminal_green" />
+
+        <Button
+            android:id="@+id/btnKeyAlt"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="36dp"
+            android:layout_height="30dp"
+            android:layout_marginHorizontal="1dp"
+            android:fontFamily="monospace"
+            android:text="Alt"
+            android:textSize="9sp"
+            android:padding="0dp"
+            android:textColor="@color/terminal_green" />
+
+        <Button
+            android:id="@+id/btnKeyEsc"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="36dp"
+            android:layout_height="30dp"
+            android:layout_marginHorizontal="1dp"
+            android:fontFamily="monospace"
+            android:text="Esc"
+            android:textSize="9sp"
+            android:padding="0dp"
+            android:textColor="@color/terminal_green" />
+
+        <Button
+            android:id="@+id/btnKeyUp"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="36dp"
+            android:layout_height="30dp"
+            android:layout_marginHorizontal="1dp"
+            android:fontFamily="monospace"
+            android:text="↑"
+            android:textSize="11sp"
+            android:padding="0dp"
+            android:textColor="@color/terminal_green" />
+
+        <Button
+            android:id="@+id/btnKeyDown"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="36dp"
+            android:layout_height="30dp"
+            android:layout_marginHorizontal="1dp"
+            android:fontFamily="monospace"
+            android:text="↓"
+            android:textSize="11sp"
+            android:padding="0dp"
+            android:textColor="@color/terminal_green" />
+
+        <Button
+            android:id="@+id/btnKeyHome"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="40dp"
+            android:layout_height="30dp"
+            android:layout_marginHorizontal="1dp"
+            android:fontFamily="monospace"
+            android:text="Home"
+            android:textSize="9sp"
+            android:padding="0dp"
+            android:textColor="@color/terminal_green" />
+
+        <Button
+            android:id="@+id/btnKeyEnd"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="36dp"
+            android:layout_height="30dp"
+            android:layout_marginHorizontal="1dp"
+            android:fontFamily="monospace"
+            android:text="End"
+            android:textSize="9sp"
+            android:padding="0dp"
+            android:textColor="@color/terminal_green" />
+
+        <Button
+            android:id="@+id/btnKeyDel"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="36dp"
+            android:layout_height="30dp"
+            android:layout_marginHorizontal="1dp"
+            android:fontFamily="monospace"
+            android:text="Del"
+            android:textSize="9sp"
+            android:padding="0dp"
+            android:textColor="@color/terminal_green" />
+
+        <Button
+            android:id="@+id/btnKeyFiles"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="48dp"
+            android:layout_height="30dp"
+            android:layout_marginHorizontal="1dp"
+            android:fontFamily="monospace"
+            android:text="Files"
+            android:textSize="9sp"
+            android:padding="0dp"
+            android:textColor="@color/terminal_green" />
+    </LinearLayout>
 
     <!-- Input Bar -->
     <LinearLayout

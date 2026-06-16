@@ -94,6 +94,7 @@ class TerminalFragment : Fragment() {
     }
 
     private fun setupListeners() {
+        setupKeyboardToolbar()
         btnSend.setOnClickListener { executeCommand() }
         btnClear.setOnClickListener { terminalOutput.text = ""; printWelcome() }
         btnRunPython.setOnClickListener { showPythonDialog() }
@@ -101,6 +102,42 @@ class TerminalFragment : Fragment() {
             lifecycleScope.launch { showFileExplorer() }
         }
         terminalInput.setOnEditorActionListener { _, _, _ -> executeCommand(); true }
+    }
+
+    private fun setupKeyboardToolbar() {
+        view?.findViewById<android.widget.Button>(R.id.btnKeyTab)?.setOnClickListener { terminalInput.text.insert(terminalInput.selectionStart, "\t") }
+        view?.findViewById<android.widget.Button>(R.id.btnKeyEsc)?.setOnClickListener { terminalInput.text.insert(terminalInput.selectionStart, "\u001b") }
+        view?.findViewById<android.widget.Button>(R.id.btnKeyUp)?.setOnClickListener {
+            if (commandHistory.isNotEmpty()) {
+                historyIndex = if (historyIndex > 0) historyIndex - 1 else 0
+                terminalInput.setText(commandHistory.getOrElse(historyIndex) { "" })
+                terminalInput.setSelection(terminalInput.text.length)
+            }
+        }
+        view?.findViewById<android.widget.Button>(R.id.btnKeyDown)?.setOnClickListener {
+            if (commandHistory.isNotEmpty() && historyIndex < commandHistory.size - 1) {
+                historyIndex++
+                terminalInput.setText(commandHistory.getOrElse(historyIndex) { "" })
+                terminalInput.setSelection(terminalInput.text.length)
+            }
+        }
+        view?.findViewById<android.widget.Button>(R.id.btnKeyHome)?.setOnClickListener { terminalInput.setSelection(0) }
+        view?.findViewById<android.widget.Button>(R.id.btnKeyEnd)?.setOnClickListener { terminalInput.setSelection(terminalInput.text.length) }
+        view?.findViewById<android.widget.Button>(R.id.btnKeyDel)?.setOnClickListener {
+            val cp = terminalInput.selectionStart
+            if (cp < terminalInput.text.length) {
+                val t = terminalInput.text.toString()
+                terminalInput.setText(t.substring(0, cp) + t.substring(cp + 1))
+                terminalInput.setSelection(cp)
+            }
+        }
+        view?.findViewById<android.widget.Button>(R.id.btnKeyFiles)?.setOnClickListener { lifecycleScope.launch { showFileExplorer() } }
+        view?.findViewById<android.widget.ImageButton>(R.id.btnToggleKeyboard)?.setOnClickListener {
+            val kb = view?.findViewById<android.view.View>(R.id.keyboardToolbar)
+            if (kb != null) {
+                kb.visibility = if (kb.visibility == android.view.View.VISIBLE) android.view.View.GONE else android.view.View.VISIBLE
+            }
+        }
     }
 
     // ===================== FEATURE 1: BANNER DINÁMICO =====================

@@ -180,7 +180,7 @@ ubuntu_exec() {
 
 # Alias que usan PRoot para ejecutar comandos Ubuntu
 if [ -f DOLLARPROOT_BIN ] && [ -d DOLLARUBUNTU_DIR/etc ]; then
-    alias ubuntu='env PROOT_TMP_DIR=DOLLARTMP_DIR LD_LIBRARY_PATH=DOLLARLD_PATH /system/bin/linker64 DOLLARPROOT_BIN -r DOLLARUBUNTU_DIR -b /system -b /dev -b /proc -b /sys -b /storage -b /dev/pts -w /root /usr/bin/env HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin LANG=en_US.UTF-8 LC_ALL=C TERM=xterm-256color PROOT_TMP_DIR=DOLLARTMP_DIR /bin/bash --login'
+    alias ubuntu='env PROOT_TMP_DIR=DOLLARTMP_DIR LD_LIBRARY_PATH=DOLLARLD_PATH /system/bin/linker64 DOLLARPROOT_BIN -r DOLLARUBUNTU_DIR -b /system -b /dev -b /proc -b /sys -b /storage -b /dev/pts -w /root /bin/bash --login'
     
     echo ""
     echo "  Ubuntu 24.04 ARM64 listo via PRoot!"
