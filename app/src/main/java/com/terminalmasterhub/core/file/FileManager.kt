@@ -39,7 +39,10 @@ object FileManager {
      * Obtiene una carpeta temporal para extracciones.
      */
     fun getTempDir(context: Context): File {
-        val dir = File(context.cacheDir, "terminal_master_hub_tmp")
+        // Usar almacenamiento compartido para archivos grandes (ROMs de 8+ GB)
+        // El cacheDir de la app esta en /data/ con espacio limitado
+        val basePath = File(getStoragePath(), ".TerminalMasterHub/tmp")
+        val dir = File(basePath, "terminal_master_hub_tmp")
         if (!dir.exists()) dir.mkdirs()
         return dir
     }

@@ -53,12 +53,18 @@ class TgzExtractor(private val context: Context) {
 
             // Verificar espacio en disco
             val freeSpace = outputDir.freeSpace
-            val neededSpace = tgzFile.length() * 3 // ROMs comprimidas ~3x factor
+            val neededSpace = tgzFile.length() * 2 // ROMs comprimidas ~2x factor
             if (freeSpace < neededSpace) {
                 onProgress?.invoke(ExtractionProgress(
                     currentFile = "ERROR: Espacio insuficiente. Necesario: ${neededSpace / (1024*1024)}MB, Disponible: ${freeSpace / (1024*1024)}MB"
                 ))
-                return@withContext null
+                // No retornar null - intentar extraer de todas formas si hay al menos 1GB
+                if (freeSpace < (1024 * 1024 * 1024)) {
+                    return@withContext null
+                }
+                onProgress?.invoke(ExtractionProgress(
+                    currentFile = "Espacio ajustado, intentando extraer..."
+                ))
             }
 
             if (!outputDir.exists()) outputDir.mkdirs()
